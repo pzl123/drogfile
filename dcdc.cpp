@@ -174,7 +174,21 @@ void test(void)
         std::smatch match;
         std::string datastr = match[1];
         std::string timestr = match[2];
-        std::cout << line << std::endl;
+        std::string can_idstr = match[4];
+        std::string can_data = match[5];
+        std::cout << datastr << timestr << can_idstr << can_data << std::endl;
+        struct can_frame frame = {0};
+        frame.can_id = std::stoi(can_idstr, nullptr, 16);
+
+        std::istringstream iss(datastr);
+        std::string byteStr;
+        int index = 0;
+        while (std::getline(iss, byteStr, ' ') && index < 8) {
+            if (byteStr.empty()) continue;
+            frame.data[index] = static_cast<uint8_t>(std::stoi(byteStr, nullptr, 16));
+            ++index;
+        }
+
         deal_with_frame(frame);
     }
     file.close();
