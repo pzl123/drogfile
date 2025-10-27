@@ -1,0 +1,201 @@
+#include "dcdc.h"
+#include "dc_dc_recv.h"
+
+#include <fstream>
+#include <string>
+#include <regex>
+
+#include <linux/can.h>
+
+dcdc::dcdc()
+    : dcdc_id(0)
+    , model(DC_DC_MODEL_WINLINE)           // 默认永联
+    , dip_addr(0)
+    , comm_state(false)                    // 默认掉线
+    , dcdc_state(DCDC_STATE_FAULT)         // 安全起见，初始为故障
+    , input_vol(0.0f)
+    , output_vol(0.0f)
+    , output_vol_max(0.0f)
+    , output_cur(0.0f)
+    , rated_output_cur(0.0f)
+    , limit_point(0.0f)
+    , input_pwr(0.0f)
+    , output_pwr(0.0f)
+    , rated_output_pwr(0.0f)
+    , pfc0_vol(0.0f)
+    , pfc1_vol(0.0f)
+    , env_temp(0.0f)
+    , dc_board_temp(0.0f)
+    , pfc_temp(0.0f)
+    , work_altitude(0)
+    , alarm_bit{}                         // 零初始化位域结构体
+    , group_num(0)
+    , input_model(DCDC_MISMATCH)          // 初始为“模式不匹配”
+    , switch_state(DCDC_TURN_OFF)         // 默认关机
+    , addr_alloc_meth(DCDC_DIP_ADDR_ALLOC)// 默认拨码分配
+    , sc_reset(DCDC_DISABLE_SC_RESET)
+    , over_vol_reset(DCDC_DISABLE_OVER_VOL_RESET)
+    , over_vol_protect(DCDC_ENABLE_OVER_VOL_PROTECT)
+    , dc_set_msg{}                        // 零初始化结构体
+{
+    // 如果 alarm_bit 和 dc_set_msg 有复杂逻辑，可在此补充
+    // 但当前已通过 {} 初始化为 0，安全
+};
+
+dcdc::~dcdc()
+{
+}
+
+typedef struct
+{
+    uint32_t func_no;
+    int32_t (*on_recv_func)(struct can_frame frame);
+} dc_recv_func_map_t;
+static dc_recv_func_map_t g_dc_recv_func_map[] = {
+    {.func_no = GET_MODE_OUTPUT_VOL,                      .on_recv_func = &recv_get_mode_out_vol},
+    {.func_no = GET_MODE_OUTPUT_CUR,                      .on_recv_func = &recv_get_mode_out_cur},
+    {.func_no = GET_MODE_LIMIT_POIINT,                    .on_recv_func = &recv_get_mode_flow_limit_point},
+    {.func_no = GET_MODE_DC_BORAD_TEMP,                   .on_recv_func = &recv_get_mode_dc_card_temp},
+    {.func_no = GET_MODE_DC_INPUT_VOL,                    .on_recv_func = &recv_get_mode_dc_input_vol},
+    {.func_no = GET_MODE_PFC0_VOL,                        .on_recv_func = &recv_get_mode_pfc0_vol},
+    {.func_no = GET_MODE_PFC1_VOL,                        .on_recv_func = &recv_get_mode_pfc1_vol},
+    {.func_no = GET_MODE_ENV_TEMP,                        .on_recv_func = &recv_get_mode_env_temp},
+    {.func_no = GET_MODE_PFC_temp,                        .on_recv_func = &recv_get_mode_pfc_temp},
+    {.func_no = GET_MODE_RATED_OUTPUT_PWR,                .on_recv_func = &recv_get_mode_rated_out_pow},
+    {.func_no = GET_MODE_RATED_OUTPUT_CUR,                .on_recv_func = &recv_get_mode_rated_out_cur},
+    {.func_no = SET_MODE_WORK_ALTITUDE,                   .on_recv_func = &recv_set_mode_work_altitude},
+    {.func_no = SET_MODE_OUTPUT_CUR,                      .on_recv_func = &recv_set_mode_out_cur},
+    {.func_no = SET_MODE_GROUP_NUM,                       .on_recv_func = &recv_set_mode_group_num},
+    {.func_no = SET_MODE_ADDR_ALLOC_METH,                 .on_recv_func = &recv_set_mode_addr_alloc},
+    {.func_no = SET_MODE_OUTPUT_PWR,                      .on_recv_func = &recv_set_mode_out_pwr},
+    {.func_no = SET_MODE_OUTPUT_VOL,                      .on_recv_func = &recv_set_mode_out_vol},
+    {.func_no = SET_MODE_LIMIT_POINT,                     .on_recv_func = &recv_set_mode_limit_point},
+    {.func_no = SET_MODE_OUTPUT_VOL_MAX,                  .on_recv_func = &recv_set_mode_out_vol_max},
+    {.func_no = SET_MODE_SWITCH,                          .on_recv_func = &recv_set_mode_on_or_off},
+    {.func_no = SET_MODE_OVER_VOL_RESET,                  .on_recv_func = &recv_set_mode_over_vol_reset},
+    {.func_no = SET_MODE_OUT_OVER_VOL_PROTECTION_RELATED, .on_recv_func = &recv_set_mode_out_over_vol_protection},
+    {.func_no = GET_MODE_ALARM_BIT,                       .on_recv_func = &recv_get_mode_alarm_status},
+    {.func_no = GET_MODE_DIP_ADDR,                        .on_recv_func = &recv_get_mode_dip_addr},
+    {.func_no = SET_MODE_SC_RESET,                        .on_recv_func = &recv_set_mode_sc_reset},
+    {.func_no = SET_MODE_INPUT_MODEL,                     .on_recv_func = &recv_set_mode_input_model},
+    {.func_no = GET_MODE_INPUT_PWR,                       .on_recv_func = &recv_get_mode_input_pow},
+    {.func_no = GET_MODE_WORK_ALTITUDE,                   .on_recv_func = &recv_get_mode_work_altitude},
+    {.func_no = GET_MODE_INPUT_MODEL,                     .on_recv_func = &recv_get_mode_input_work_mode},
+    {.func_no = GET_MODE_DCDC_SOFTWARE_VER,               .on_recv_func = &recv_get_mode_dcdc_soft_ver},
+    {.func_no = GET_MODE_PFC_SOFTWARE_VER,                .on_recv_func = &recv_get_mode_pfc_soft_ver}
+};
+
+static dcdc g_dcdc[DCDC_NUM];
+
+dcdc *get_g_dcdc_info(void)
+{
+    return g_dcdc;
+}
+
+static bool find_dcdc_func_no(uint32_t func_no, uint32_t *index)
+{
+    for (uint32_t i = 0; i < MY_ARRAY_SIZE(g_dc_recv_func_map); i++)
+    {
+        // log_d("g_dc_recv_func_map[%d].func_no = %x, func_no = %x", i, g_dc_recv_func_map[i].func_no, func_no);
+        if (g_dc_recv_func_map[i].func_no == func_no)
+        {
+            *index = i;
+            return true;
+        }
+    }
+    return false;
+}
+
+
+static void deal_with_frame(struct can_frame frame)
+{
+    dcdc_can_id_u can_id_info = {0};
+    can_id_info.id = frame.can_id;
+    if (can_id_info.can_id_info.protno != NORMAL_PROTNO) /* 只通过0x060开头的报文 */
+    {
+        return;
+    }
+
+    if (can_id_info.can_id_info.src_addr == 0xF0) /* 发送报文 */
+    {
+        set_output_vol(frame);
+    }
+    else if (can_id_info.can_id_info.dst_addr == 0xF0) /* 接收报文 */
+    {
+        if (0xF0!=frame.data[1])
+        {
+            return;
+        }
+        else
+        {
+            uint16_t func_no = (uint16_t)((((uint16_t)frame.data[2])<<8) | ((uint16_t)frame.data[3]));
+            uint32_t func_index = 0;
+            if (!find_dcdc_func_no(func_no, &func_index))
+            {
+                return;
+            }
+            else
+            {
+                if (func_index >= MY_ARRAY_SIZE(g_dc_recv_func_map))
+                {
+                    return;
+                }
+                else
+                {
+                    (void)g_dc_recv_func_map[func_index].on_recv_func(frame);
+                    return;
+                }
+            }
+        }
+    }
+    else
+    {
+        return;
+    }
+
+}
+
+void test(void)
+{
+
+    std::ifstream file("bc.log");
+    std::string line;
+
+    if (!file.is_open())
+    {
+        std::cout << "open error" << std::endl;
+        return;
+    }
+
+    struct can_frame frame;
+    while(std::getline(file, line))
+    {
+        std::regex re(R"zzz(\((\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d+)\)\s+(\w+)\s+([0-9a-fA-F]+)\s+\[\d\]\s+(([0-9a-fA-F]{2}(?:\s+[0-9a-fA-F]{2})*)?))zzz");
+        std::smatch match;
+        std::string datastr = match[1];
+        std::string timestr = match[2];
+        std::cout << line << std::endl;
+        deal_with_frame(frame);
+    }
+    file.close();
+
+    frame.can_id = 0x86083F80;
+    frame.can_dlc = 8;
+    frame.data[0] = 0x03;
+    frame.data[1] = 0x00;
+    frame.data[2] = 0x00;
+    frame.data[3] = 0x21;
+    frame.data[4] = 0x43;
+    frame.data[5] = 0xB4;
+    frame.data[6] = 0xE6;
+    frame.data[7] = 0x66;
+    deal_with_frame(frame);
+    std::cout << g_dcdc[7].get_output_vol() << std::endl;
+}
+
+int main(void)
+{
+    test();
+    return 0;
+}
+

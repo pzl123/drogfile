@@ -1,0 +1,21 @@
+# ninja log v5
+1	19	0	CMakeFiles/drogfile_autogen	27cb916224729792
+153	2255	1761273273747567782	CMakeFiles/drogfile.dir/drogfile_autogen/mocs_compilation.cpp.o	383b5ecbcd389184
+1579	1922	1761290388963671103	drogfile	4c6c4912980b5b2f
+1	19	0	drogfile_autogen/mocs_compilation.cpp	27cb916224729792
+153	2155	1761273273647567497	CMakeFiles/drogfile.dir/main.cpp.o	349e9accebc16781
+19	1579	1761290388627664650	CMakeFiles/drogfile.dir/widget.cpp.o	24a971a44e5c6bf6
+15	18	0	clean	a7c70eacb11a5051
+0	15	0	CMakeFiles/clean.additional	f6da8fdf566d66c6
+2	15	0	CMakeFiles/drogfile_autogen	27cb916224729792
+2	15	0	drogfile_autogen/mocs_compilation.cpp	27cb916224729792
+2	26	0	CMakeFiles/drogfile_autogen	27cb916224729792
+2	26	0	drogfile_autogen/mocs_compilation.cpp	27cb916224729792
+26	1561	1761290654007836471	CMakeFiles/drogfile.dir/widget.cpp.o	24a971a44e5c6bf6
+1561	1898	1761290654339840714	drogfile	4c6c4912980b5b2f
+1	22	0	CMakeFiles/drogfile_autogen	27cb916224729792
+1	22	0	drogfile_autogen/mocs_compilation.cpp	27cb916224729792
+22	1550	1761290901706522581	CMakeFiles/drogfile.dir/widget.cpp.o	24a971a44e5c6bf6
+1550	1880	1761290902034525595	drogfile	4c6c4912980b5b2f
+1	19	0	CMakeFiles/drogfile_autogen	27cb916224729792
+1	19	0	drogfile_autogen/mocs_compilation.cpp	27cb916224729792
