@@ -118,7 +118,45 @@ static void deal_with_frame(struct can_frame frame)
 
     if (can_id_info.can_id_info.src_addr == 0xF0) /* 发送报文 */
     {
-        set_output_vol(frame);
+        print_can_frame(frame);
+        dcdc_func_no_type func_no = (dcdc_func_no_type)((frame.data[2] << 8) | frame.data[3]);
+        switch (func_no)
+        {
+        case SET_MODE_WORK_ALTITUDE:
+            frame2set_output_vol(frame);
+            break;
+        case SET_MODE_OUTPUT_CUR:
+            frame2set_output_cur(frame);
+            break;
+        case SET_MODE_GROUP_NUM:
+            frame2set_group_num(frame);
+            break;
+        case SET_MODE_ADDR_ALLOC_METH:
+            break;
+        case SET_MODE_OUTPUT_PWR:
+            frame2set_output_pwr(frame);
+            break;
+        case SET_MODE_OUTPUT_VOL:
+            frame2set_output_vol(frame);
+            break;
+        case SET_MODE_OUTPUT_VOL_MAX:
+            frame2set_output_vol_max(frame);
+            break;
+        case SET_MODE_SWITCH:
+            frame2set_switch_state(frame);
+            break;
+        case SET_MODE_OVER_VOL_RESET:
+            frame2set_over_vol_reset(frame);
+            break;
+        case SET_MODE_OUT_OVER_VOL_PROTECTION_RELATED:
+            frame2set_over_vol_protect(frame);
+            break;
+        case SET_MODE_SC_RESET:
+            frame2set_sc_reset(frame);
+            break;
+        default:
+            break;
+        }
     }
     else if (can_id_info.can_id_info.dst_addr == 0xF0) /* 接收报文 */
     {
@@ -172,39 +210,75 @@ void test(void)
     {
         std::regex re(R"zzz(\((\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d+)\)\s+(\w+)\s+([0-9a-fA-F]+)\s+\[\d\]\s+(([0-9a-fA-F]{2}(?:\s+[0-9a-fA-F]{2})*)?))zzz");
         std::smatch match;
-        std::string datastr = match[1];
-        std::string timestr = match[2];
-        std::string can_idstr = match[4];
-        std::string can_data = match[5];
-        std::cout << datastr << timestr << can_idstr << can_data << std::endl;
-        struct can_frame frame = {0};
-        frame.can_id = std::stoi(can_idstr, nullptr, 16);
+        if (std::regex_search(line, match, re))
+        {
+            std::string datastr = match[1];
+            std::string timestr = match[2];
+            std::string can_idstr = match[4];
+            std::string can_data = match[5];
+            // std::cout << datastr << " "<< timestr << ":0x"<< can_idstr << " "<< can_data << std::endl;
+            struct can_frame frame = {0};
+            frame.can_id = std::stoi(can_idstr, nullptr, 16);
 
-        std::istringstream iss(datastr);
-        std::string byteStr;
-        int index = 0;
-        while (std::getline(iss, byteStr, ' ') && index < 8) {
-            if (byteStr.empty()) continue;
-            frame.data[index] = static_cast<uint8_t>(std::stoi(byteStr, nullptr, 16));
-            ++index;
+            std::istringstream iss(can_data);
+            std::string byteStr;
+            int index = 0;
+            bool frame_valid = true;
+            while (std::getline(iss, byteStr, ' ') && index < 8)
+            {
+                if (byteStr.empty())
+                {
+                    continue;
+                }
+                else
+                {
+                    try
+                    {
+                        frame.data[index] = static_cast<uint8_t>(std::stoi(byteStr, nullptr, 16));
+                    } catch (const std::invalid_argument & e)
+                    {
+                        std::cerr << " invalid argument" << e.what() << std::endl;
+                        frame_valid = false;
+                        break;  // 立即停止解析
+                    } catch (const std::out_of_range & e)
+                    {
+                        std::cerr << "out of range " << e.what() << std::endl;
+                        frame_valid = false;
+                        break;  // 立即停止解析
+                    }
+                }
+                ++index;
+            }
+
+            if (frame_valid && 7 == index)
+            {
+                frame.can_dlc = 8;
+                deal_with_frame(frame);
+            }
         }
-
-        deal_with_frame(frame);
+        else
+        {
+            std::cout << "regex error:" << line <<std::endl;
+        }
     }
     file.close();
 
-    frame.can_id = 0x86083F80;
-    frame.can_dlc = 8;
-    frame.data[0] = 0x03;
-    frame.data[1] = 0x00;
-    frame.data[2] = 0x00;
-    frame.data[3] = 0x21;
-    frame.data[4] = 0x43;
-    frame.data[5] = 0xB4;
-    frame.data[6] = 0xE6;
-    frame.data[7] = 0x66;
-    deal_with_frame(frame);
-    std::cout << g_dcdc[7].get_output_vol() << std::endl;
+    // frame.can_id = 0x86083F80;
+    // frame.can_dlc = 8;
+    // frame.data[0] = 0x03;
+    // frame.data[1] = 0x00;
+    // frame.data[2] = 0x00;
+    // frame.data[3] = 0x21;
+    // frame.data[4] = 0x43;
+    // frame.data[5] = 0xB4;
+    // frame.data[6] = 0xE6;
+    // frame.data[7] = 0x66;
+    // deal_with_frame(frame);
+    // frame.data[3] = 0x23;
+    // deal_with_frame(frame);
+    // dcdc_can_id_u canId{};
+    // canId.id = frame.can_id;
+    // std::cout << "dc[" << canId.can_id_info.dst_addr << "]" << g_dcdc[canId.can_id_info.dst_addr - 1].get_output_vol() <<" " << g_dcdc[canId.can_id_info.dst_addr - 1].get_set_output_vol() << std::endl;
 }
 
 int main(void)

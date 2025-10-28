@@ -222,31 +222,58 @@ typedef struct dc_set_msg
     /* 告警位图（可读） */ \
     _(mode_alarm_bit_state_t, alarm_bit, "模块告警/保护位图")
 
+#define DC_SET_MEMBER_LIST(_)\
+    _(float32_t, output_vol, "设置的输出电压")\
+    _(float32_t, output_vol_max, "设置的输出电压上限")\
+    _(float32_t, output_cur, "设置的输出电压")\
+    _(float32_t, output_pwr, "设置的功率")\
+    _(switch_state_e, switch_state, "设置的模块开关机")\
+    _(uint32_t, group_num, "设置的组号")\
+    _(uint32_t, work_altitude, "设置的海拔")\
+    _(over_vol_reset_e, over_vol_reset, "设置的过压复位")\
+    _(over_vol_protect_e, over_vol_protect, "设置的过压保护")\
+    _(sc_reset_e, sc_reset, "设置的短路复位")
+
 class dcdc
 {
 public:
     dcdc();
     ~dcdc();
 
-    template <typename AnyType>
-    void update_member(AnyType &old_data, AnyType new_data)
+    template <typename T>
+    void update_member(T &old_data, const T &new_data)
     {
         old_data = new_data;
     }
 
-    #define MAKE_GETTER(type, name, doc) type get_##name() const { return name; }
+// 为普通成员生成 getter/setter
+#define MAKE_GETTER(type, name, doc) \
+    type get_##name() const { return name; }
     DCDC_MEMBER_LIST(MAKE_GETTER)
-    #undef MAKE_GETTER
+#undef MAKE_GETTER
 
-    #define MAKE_SETTER(type, name, doc) void set_##name(const type& v) { update_member(name, v); }
+#define MAKE_SETTER(type, name, doc) \
+    void set_##name(const type &v) { update_member(name, v); }
     DCDC_MEMBER_LIST(MAKE_SETTER)
-    #undef MAKE_SETTER
+#undef MAKE_SETTER
+
+// 为 dc_set_msg 成员生成 getter/setter
+#define MAKE_GETSETTER(type, name, doc) \
+    type get_set_##name() const { return dc_set_msg.name; }
+    DC_SET_MEMBER_LIST(MAKE_GETSETTER)
+#undef MAKE_GETSETTER
+
+#define MAKE_SETSETTER(type, name, doc) \
+    void set_set_##name(const type &v) { update_member(dc_set_msg.name, v); }
+    DC_SET_MEMBER_LIST(MAKE_SETSETTER)
+#undef MAKE_SETSETTER
 
 private:
-    #define DECLARE_MEMBER(type, name, doc) type name{};
+#define DECLARE_MEMBER(type, name, doc) type name{};
     DCDC_MEMBER_LIST(DECLARE_MEMBER)
-    #undef DECLARE_MEMBER
-    dc_set_msg_t dc_set_msg;             /* dcdc 设置保存信息 */
+#undef DECLARE_MEMBER
+
+    dc_set_msg_t dc_set_msg{}; // 值初始化为 0
 };
 
 dcdc *get_g_dcdc_info(void);

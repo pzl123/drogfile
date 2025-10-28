@@ -23,110 +23,160 @@ static uint32_t frame_from_dcdc_index(struct can_frame frame)
     return can_id.can_id_info.dst_addr - 1;
 }
 
-class float_extractor
-{
-private:
-    float32_t value;
-public:
-    void operator()(struct can_frame frame, recv_data_t *data)
-    {
-        recv_float_data_pre(frame, data);
-        value = data->float_data;
-    }
-    float32_t get_value() { return value;}
-};
 
-class uint32_extractor
+template <typename SetterFunc>
+void frame_to_set(const can_frame &frame, SetterFunc setter, bool is_float = true)
 {
-private:
-    uint32_t value;
-public:
-    void operator()(struct can_frame frame, recv_data_t *data)
-    {
-        recv_data_pre(frame, data);
-        value = data->data;
-    }
-    uint32_t get_value() { return value;}
-};
+    dcdc_can_id_u canId{};
+    canId.id = frame.can_id;
 
-template<typename EnumType>
-class enum_extractor
-{
-private:
-    EnumType value;
-public:
-    void operator()(struct can_frame frame, recv_data_t *data)
-    {
-        recv_data_pre(frame, data);
-        value = static_cast<EnumType>(data->data);
-    }
-    EnumType get_value() { return value;}
-};
-
-template<typename SetterFunc, typename Extractor>
-void generic_set_value(struct can_frame frame, SetterFunc setter, Extractor extractor)
-{
-    uint32_t index = frame_from_dcdc_index(frame);
-    dcdc *dcdc = get_g_dcdc_info();
-    recv_data_t recv_data = {0};
-    extractor(frame, &recv_data);
-    auto value = extractor.get_value();
-    (dcdc[index].*setter)(value);
-}
-
-#define PRINT_SET_INFO(set_func) \
-    void print_debug(struct can_frame frame)\
-    {\
-        print_can_frame(FRAME); \
-        dcdc_can_id_u can_id;\
-        can_id.id = frame.can_id;\
-        dcdc *dc = get_g_dcdc_info();\
-        std::cout << "dcdc[" << can_id.can_id_info.dst_addr << "]" << __func__ << ":" <<  dc[can_id.can_id_info.dst_addr - 1].get_output_vol() << std::endl;\
-    }
-
-void set_output_vol(struct can_frame frame)
-{
-    generic_set_value(frame, &dcdc::set_output_vol, float_extractor{});
-    print_can_frame(frame);
-    dcdc_can_id_u can_id;
-    can_id.id = frame.can_id;
     dcdc *dc = get_g_dcdc_info();
-    std::cout << "dcdc[" << can_id.can_id_info.dst_addr << "]" << __func__ << ":" <<  dc[can_id.can_id_info.dst_addr - 1].get_output_vol() << std::endl;
+    recv_data_t data = {0};
+    if (is_float)
+    {
+        recv_float_data_pre(frame, &data);
+    }
+    else
+    {
+        recv_data_pre(frame, &data);
+    }
+    float32_t value_f = data.float_data;
+    float32_t value_u = data.data;
+
+    if (0 == canId.can_id_info.ptp) /* 广播 */
+    {
+        if (0xFE == canId.can_id_info.dst_addr) /* 组内广播 */
+        {
+            for (uint8_t i = 0U; i < DCDC_NUM; i++)
+            {
+                if (canId.can_id_info.group == dc[i].get_group_num())
+                {
+                    if (is_float)
+                    {
+                        (dc[i].*setter)(value_f);
+                    }
+                    else
+                    {
+                        (dc[i].*setter)(value_u);
+                    }
+                }
+            }
+        }
+        else if (0xFF == canId.can_id_info.dst_addr) /* 全广播 */
+        {
+            for (uint8_t i = 0U; i < DCDC_NUM; i++)
+            {
+                if (is_float)
+                {
+                    (dc[i].*setter)(value_f);
+                }
+                else
+                {
+                    (dc[i].*setter)(value_u);
+                }
+            }
+        }
+        else
+        {
+            std::cout << "error dst " << canId.can_id_info.dst_addr << std::endl;
+        }
+    }
+    else
+    {
+        if (is_float)
+        {
+            (dc[canId.can_id_info.dst_addr - 1].*setter)(value_f);
+        }
+        else
+        {
+            (dc[canId.can_id_info.dst_addr - 1].*setter)(value_u);
+        }
+    }
 }
 
-void set_output_vol_max(struct can_frame frame)
+template <typename SetterFunc, typename EnumType>
+void frame_to_set(const can_frame& frame, SetterFunc setter, EnumType*)
 {
-    generic_set_value(frame, &dcdc::set_output_vol_max, float_extractor{});
+    dcdc_can_id_u canId{};
+    canId.id = frame.can_id;
+    dcdc* dc = get_g_dcdc_info();
+    recv_data_t data = {0};
+    recv_data_pre(frame, &data);
+    uint32_t raw_value = data.data;
+
+    EnumType value = static_cast<EnumType>(raw_value);
+
+    uint8_t dst = canId.can_id_info.dst_addr;
+
+    if (canId.can_id_info.ptp == 0) // 广播
+    {
+        if (dst == 0xFE) // 组内广播
+        {
+            for (uint8_t i = 0; i < DCDC_NUM; ++i)
+            {
+                if (canId.can_id_info.group == dc[i].get_group_num())
+                {
+                    (dc[i].*setter)(value);
+                }
+            }
+        }
+        else if (dst == 0xFF) // 全广播
+        {
+            for (uint8_t i = 0; i < DCDC_NUM; ++i)
+            {
+                (dc[i].*setter)(value);
+            }
+        }
+        else
+        {
+            std::cout << "error dst " << (int)dst << std::endl;
+        }
+    }
+    else
+    {
+        (dc[dst - 1].*setter)(value);
+    }
 }
-void set_output_cur(struct can_frame frame)
+
+
+void frame2set_output_vol(struct can_frame frame)
 {
-    generic_set_value(frame, &dcdc::set_output_cur, float_extractor{});
+    frame_to_set(frame, &dcdc::set_set_output_vol);
 }
-void set_output_pwr(struct can_frame frame)
+
+void frame2set_output_vol_max(struct can_frame frame)
 {
-    generic_set_value(frame, &dcdc::set_output_pwr, float_extractor{});
+    frame_to_set(frame, &dcdc::set_set_output_vol_max);
 }
-void set_switch_state(struct can_frame frame)
+void frame2set_output_cur(struct can_frame frame)
 {
-    generic_set_value(frame, &dcdc::set_switch_state, enum_extractor<switch_state_e>{});
+    frame_to_set(frame, &dcdc::set_set_output_cur);
 }
-void set_group_num(struct can_frame frame)
+void frame2set_output_pwr(struct can_frame frame)
 {
-    generic_set_value(frame, &dcdc::set_group_num, uint32_extractor{});
+    frame_to_set(frame, &dcdc::set_set_output_pwr);
 }
-void set_work_altitude(struct can_frame frame)
+void frame2set_switch_state(struct can_frame frame)
 {
-    generic_set_value(frame, &dcdc::set_work_altitude, uint32_extractor{});
+    frame_to_set(frame, &dcdc::set_set_switch_state, (switch_state_e*)nullptr);
 }
-void set_over_vol_reset(struct can_frame frame)
+void frame2set_group_num(struct can_frame frame)
 {
-    generic_set_value(frame, &dcdc::set_over_vol_reset, enum_extractor<over_vol_reset_e>{});
+    frame_to_set(frame, &dcdc::set_set_group_num, false);
 }
-void set_over_vol_protect(struct can_frame frame)
+void frame2set_work_altitude(struct can_frame frame)
 {
-    generic_set_value(frame, &dcdc::set_over_vol_protect, enum_extractor<over_vol_protect_e>{});
+    frame_to_set(frame, &dcdc::set_set_work_altitude, false);
 }
-void set_sc_reset(struct can_frame frame)
+void frame2set_over_vol_reset(struct can_frame frame)
 {
-    generic_set_value(frame, &dcdc::set_sc_reset, enum_extractor<sc_reset_e>{});
+    frame_to_set(frame, &dcdc::set_set_over_vol_reset, (over_vol_reset_e*)nullptr);
+}
+void frame2set_over_vol_protect(struct can_frame frame)
+{
+    frame_to_set(frame, &dcdc::set_set_over_vol_protect, (over_vol_protect_e*)nullptr);
+}
+void frame2set_sc_reset(struct can_frame frame)
+{
+    frame_to_set(frame, &dcdc::set_set_sc_reset, (sc_reset_e*)nullptr);
 }
