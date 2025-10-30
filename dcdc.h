@@ -277,5 +277,6 @@ private:
 };
 
 dcdc *get_g_dcdc_info(void);
+void deal_with_frame(struct can_frame frame);
 
 #endif

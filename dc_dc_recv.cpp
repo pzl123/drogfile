@@ -9,7 +9,11 @@
 #define DCDC_SET_SUCCESS (0xF0)
 #define DCDC_SET_FAILED (0xF2)
 
-
+#define PRINT_DEBUG_GET(index, func_namestr, flag_successd, value)\
+    do\
+    {\
+        std::cout << "dcdc[" << index << "] " << func_namestr << (flag_successd?" successed":" failed") << ": " << value << std::endl;\
+    } while (0)
 
 bool is_little_endian(void)
 {
@@ -88,10 +92,14 @@ int32_t recv_get_mode_pfc_soft_ver(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag  = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
         msg[recv_data.index].set_pfc_version((frame.data[6] << 8) | (frame.data[7]));
+        flag = true;
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_pfc_version());
+
     // log_d("g_dcdc_info %d %s %d", recv_data.index + 1, __FUNCTION__, msg[recv_data.index].dc_unit_focus.pfc_version);
     return 1;
 }
@@ -102,10 +110,12 @@ int32_t recv_get_mode_dcdc_soft_ver(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag  = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
         msg[recv_data.index].set_dcdc_version((frame.data[6] << 8) | (frame.data[7]));
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_dcdc_version());
     // log_d("g_dcdc_info %d %s %d", recv_data.index + 1, __FUNCTION__, msg[recv_data.index].dc_unit_focus.dcdc_version);
     return 1;
 }
@@ -129,10 +139,12 @@ int32_t recv_get_mode_work_altitude(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag  = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
         msg[recv_data.index].set_work_altitude(recv_data.data);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_work_altitude());
     return 1;
 }
 
@@ -142,11 +154,13 @@ int32_t recv_get_mode_input_pow(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag  = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_input_pwr(recv_data.float_data / DCDC_INPUT_POWER_GAIN);
     }
-
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_input_pwr());
     // if (DCDC_TURN_ON == msg[recv_data.index].switch_state)
     // {
     //     log_d("dcdc[%d] %s %f", recv_data.index+1, __FUNCTION__, msg[recv_data.index].input_pwr);
@@ -166,11 +180,15 @@ int32_t recv_get_mode_dip_addr(struct can_frame frame)
         return -1;
     }
     dcdc *msg = get_g_dcdc_info();
+    bool flag  = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[index].set_dip_addr((uint32_t)(((uint16_t)frame.data[6] << 8) | frame.data[7]));
         msg[index].set_group_num((uint32_t)(((uint16_t)frame.data[4] << 8) | frame.data[5]));
     }
+    PRINT_DEBUG_GET(index + 1, __func__, flag, msg->get_dip_addr());
+    PRINT_DEBUG_GET(index + 1, __func__, flag, msg->get_group_num());
     // log_d("can_id %u, g_dcdc_info[%u] recv_get_mode_dip_addr: dip_addr=%u, group_num=%u",
     //             can_id, index + 1, msg[index].dip_addr, msg[index].group_num);
     return 1;
@@ -202,18 +220,22 @@ int32_t recv_get_mode_alarm_status(struct can_frame frame)
     recv_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
     switch_state_e last_switch_state = msg[recv_data.index].get_switch_state();
+    bool flag  = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         mode_alarm_bit_state_t alarm_bit = {0};
         (void)memcpy(&alarm_bit, &recv_data.data, sizeof(uint32_t));
         msg[recv_data.index].set_alarm_bit(alarm_bit);
         if (0U == msg[recv_data.index].get_alarm_bit().switch_state)
         {
             msg[recv_data.index].set_switch_state(DCDC_TURN_ON);
+            PRINT_DEBUG_GET(recv_data.index + 1, "recv switch_state", flag, msg->get_switch_state());
         }
         else
         {
             msg[recv_data.index].set_switch_state(DCDC_TURN_OFF);
+            PRINT_DEBUG_GET(recv_data.index + 1, "recv switch_state", flag, msg->get_switch_state());
         }
     }
 
@@ -228,6 +250,7 @@ int32_t recv_get_mode_alarm_status(struct can_frame frame)
     if (1U == msg[recv_data.index].get_alarm_bit().mode_fault)
     {
         msg[recv_data.index].set_dcdc_state( DCDC_STATE_FAULT);
+        PRINT_DEBUG_GET(recv_data.index + 1, "recv dcdc_state", flag, msg->get_dcdc_state());
         // char bin_str[37];
         // print_binary_32(recv_data.data, bin_str, sizeof(bin_str));
         // log_e("dcdc[%d] state: DCDC_STATE_FAULT, alarm bit: %s", recv_data.index + 1, bin_str);
@@ -235,6 +258,7 @@ int32_t recv_get_mode_alarm_status(struct can_frame frame)
     else if ((0U == msg[recv_data.index].get_alarm_bit().mode_fault) && (1U == msg[recv_data.index].get_alarm_bit().mode_protect))
     {
         msg[recv_data.index].set_dcdc_state(DCDC_STATE_ALARM);
+        PRINT_DEBUG_GET(recv_data.index + 1, "recv dcdc_state", flag, msg->get_dcdc_state());
         // char bin_str[37];
         // print_binary_32(recv_data.data, bin_str, sizeof(bin_str));
         // log_e("dcdc[%d] state: DCDC_STATE_ALARM, alarm bit: %s", recv_data.index + 1, bin_str);
@@ -242,6 +266,7 @@ int32_t recv_get_mode_alarm_status(struct can_frame frame)
     else
     {
         msg[recv_data.index].set_dcdc_state(DCDC_STATE_NORMAL);
+        PRINT_DEBUG_GET(recv_data.index + 1, "recv dcdc_state", flag, msg->get_dcdc_state());
     }
 
     return 1;
@@ -254,10 +279,13 @@ int32_t recv_get_mode_rated_out_cur(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_rated_output_cur(recv_data.float_data);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_rated_output_cur());
     // log_d("g_dcdc_info %d recv_get_mode_rated_out_cur %f", index+1, g_dcdc_info[index].rated_output_cur);
     return 1;
 }
@@ -268,10 +296,13 @@ int32_t recv_get_mode_rated_out_pow(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_rated_output_pwr(recv_data.float_data / DCDC_RATED_OUTPUT_POWER_GAIN);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_rated_output_pwr());
     // log_d("g_dcdc_info %d recv_get_mode_rated_out_pow %f", recv_data.index+1, g_dcdc_info[recv_data.index].rated_output_pwr);
     return 1;
 }
@@ -282,10 +313,13 @@ int32_t recv_get_mode_pfc_temp(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_pfc_temp(recv_data.float_data);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_pfc_temp());
     // log_d("g_dcdc_info %d recv_get_mode_pfc_temp %f", index+1, g_dcdc_info[index].pfc_temp);
     return 1;
 }
@@ -296,10 +330,13 @@ int32_t recv_get_mode_env_temp(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_env_temp(recv_data.float_data);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_pfc_temp());
     // log_d("g_dcdc_info %d recv_get_mode_env_temp %f", index+1, g_dcdc_info[index].env_temp);
     return 1;
 }
@@ -310,10 +347,13 @@ int32_t recv_get_mode_pfc1_vol(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_pfc1_vol(recv_data.float_data);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_pfc1_vol());
     // log_d("g_dcdc_info %d recv_get_mode_pfc1_vol %f", index+1, g_dcdc_info[index].pfc1_vol);
     return 1;
 }
@@ -324,10 +364,13 @@ int32_t recv_get_mode_pfc0_vol(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_pfc0_vol(recv_data.float_data);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_pfc0_vol());
     // log_d("g_dcdc_info %d recv_get_mode_pfc0_vol %f", index+1, g_dcdc_info[index].pfc0_vol);
     return 1;
 }
@@ -338,10 +381,13 @@ int32_t recv_get_mode_dc_input_vol(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_input_vol(recv_data.float_data);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_input_vol());
     // if (DCDC_TURN_ON == msg[recv_data.index].switch_state)
     // {
     //     log_d("dcdc[%d] %s %f", recv_data.index+1, __FUNCTION__, msg[recv_data.index].input_vol);
@@ -355,10 +401,13 @@ int32_t recv_get_mode_dc_card_temp(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_dc_board_temp(recv_data.float_data);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_dc_board_temp());
     // log_d("g_dcdc_info %d recv_get_mode_dc_card_temp %f", index+1, g_dcdc_info[index].dc_board_temp);
     return 1;
 }
@@ -369,10 +418,13 @@ int32_t recv_get_mode_flow_limit_point(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_limit_point(recv_data.float_data);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_limit_point());
     // log_d("g_dcdc_info %d recv_get_mode_flow_limit_point %f", index+1, g_dcdc_info[index].limit_point);
     return 1;
 }
@@ -383,11 +435,15 @@ int32_t recv_get_mode_out_cur(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_output_cur(recv_data.float_data);
         msg[recv_data.index].set_output_pwr((msg[recv_data.index].get_output_vol() * msg[recv_data.index].get_output_cur()) / DCDC_POWER_GAIN);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_output_cur());
+    PRINT_DEBUG_GET(recv_data.index + 1, "recv output", flag, msg->get_output_pwr());
 
     // if (DCDC_TURN_ON == msg[recv_data.index].switch_state)
     // {
@@ -402,11 +458,15 @@ int32_t recv_get_mode_out_vol(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_output_vol(recv_data.float_data);
         msg[recv_data.index].set_output_pwr((msg[recv_data.index].get_output_vol() * msg[recv_data.index].get_output_cur()) / DCDC_POWER_GAIN);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_output_vol());
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_output_pwr());
 
     // if (DCDC_TURN_ON == msg[recv_data.index].switch_state)
     // {
@@ -422,10 +482,13 @@ int32_t recv_set_mode_sc_reset(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_sc_reset((sc_reset_e)recv_data.data);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_sc_reset());
     // log_d("dcdc[%d] %s %d", index+1, __FUNCTION__, msg[index].sc_reset);
     return 1;
 }
@@ -437,10 +500,13 @@ int32_t recv_set_mode_input_model(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_input_model((input_mode_e)recv_data.data);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_input_model());
     // log_d("dcdc[%d] %s %s %d", recv_data.index + 1, __FUNCTION__, (frame.data[1] == DCDC_SET_SUCCESS ? "success" : "failue"), msg[recv_data.index].input_model);
     return 1;
 }
@@ -451,10 +517,13 @@ int32_t recv_set_mode_out_over_vol_protection(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_over_vol_protect((over_vol_protect_e)recv_data.data);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_over_vol_protect());
     // log_d("dcdc[%d] %s %d", recv_data.index+1, __FUNCTION__, msg[recv_data.index].over_vol_protect);
     return 1;
 }
@@ -465,10 +534,13 @@ int32_t recv_set_mode_over_vol_reset(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_data_pre(frame, &recv_data);
     dcdc *msg = get_g_dcdc_info();
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         msg[recv_data.index].set_over_vol_reset((over_vol_reset_e)recv_data.data);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg->get_over_vol_reset());
     // log_d("dcdc[%d] %s %d", recv_data.index+1, __FUNCTION__, msg[recv_data.index].over_vol_reset);
     return 1;
 }
@@ -479,12 +551,15 @@ int32_t recv_set_mode_on_or_off(struct can_frame frame)
     recv_data_t recv_data = {0};
     recv_data_pre(frame, &recv_data);
     dcdc msg;
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
+        flag = true;
         switch_state_e switch_state;
         (void)memcpy(&switch_state, &recv_data.data, sizeof(uint32_t));
         msg.set_switch_state(switch_state);
     }
+    PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg.get_switch_state());
     // log_d("dcdc[%d] %s %s %s recv:%d", recv_data.index + 1, __FUNCTION__, (frame.data[1] == DCDC_SET_SUCCESS ? "success" : "failure"),
     //                                      (msg.switch_state == DCDC_TURN_ON) ? "ON" : (msg.switch_state == DCDC_TURN_OFF) ? "OFF" : "UNKNOWN", recv_data.data);
     // log_d("dcdc[%d] %s [%d]", recv_data.index+1, __FUNCTION__, msg[recv_data.index].switch_state);
@@ -493,6 +568,13 @@ int32_t recv_set_mode_on_or_off(struct can_frame frame)
 
 void recv_float_data_pre(struct can_frame frame, recv_data_t *recv_data)
 {
+    dcdc_can_id_u can_id_info = {0};
+    can_id_info.id = frame.can_id;
+    recv_data->index = can_id_info.can_id_info.src_addr - 1;
+    if (recv_data->index >= DCDC_NUM)
+    {
+        return;
+    }
     recv_data->float_data = frame_data_to_float(frame);
 }
 
@@ -501,11 +583,14 @@ int32_t recv_set_mode_out_vol_max(struct can_frame frame)
 {
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
-    dcdc *msg = get_g_dcdc_info();
+    dcdc msg{};
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
-        msg[recv_data.index].set_output_vol_max(recv_data.float_data);
+        flag = true;
+        msg.set_output_vol_max(recv_data.float_data);
     }
+    // PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg.get_output_vol_max());
     // log_d("dcdc[%d] %s %f", recv_data.index+1, __FUNCTION__, msg[recv_data.index].output_vol_max);
     // log_d("dcdc[%d] %s %s %f", recv_data.index + 1, __FUNCTION__, (frame.data[1] == DCDC_SET_SUCCESS ? "success" : "failure"), recv_data.float_data);
     return 1;
@@ -517,11 +602,14 @@ int32_t recv_set_mode_limit_point(struct can_frame frame)
     return 1;
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
-    dcdc *msg = get_g_dcdc_info();
+    dcdc msg{};
+    bool flag = false;
     if (DCDC_SET_SUCCESS == frame.data[1])
     {
-        msg[recv_data.index].set_limit_point(recv_data.float_data);
+        flag = true;
+        msg.set_limit_point(recv_data.float_data);
     }
+    // PRINT_DEBUG_GET(recv_data.index + 1, __func__, flag, msg.get_limit_point());
     // log_d("g_dcdc_info %d recv_set_mode_limit_point %f", index+1, g_dcdc_info[index].limit_point);
     return 1;
 }
@@ -531,6 +619,9 @@ int32_t recv_set_mode_out_vol(struct can_frame frame)
 {
     recv_data_t recv_data = {0};
     recv_float_data_pre(frame, &recv_data);
+    dcdc msg{};
+    msg.set_set_output_vol(recv_data.float_data);
+    // PRINT_DEBUG_GET(recv_data.index + 1, __func__, true, msg.get_set_output_vol());
     // log_d("dcdc[%d] %s %s %f", recv_data.index + 1, __FUNCTION__, (frame.data[1] == DCDC_SET_SUCCESS ? "success" : "failure"), recv_data.float_data);
 
     return 1;

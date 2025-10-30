@@ -2,6 +2,14 @@
 #define WIDGET_H
 
 #include <QWidget>
+#include <QTimer>
+#include <QSqlTableModel>
+#include <QSqlQuery>
+#include <QSqlError>
+#include <QItemSelectionModel>
+#include <QDebug>
+#include <QSqlRecord>
+#include <QMessageBox>
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -19,6 +27,13 @@ public:
 
 private:
     Ui::Widget *ui;
+    QTimer *m_timer;
+    QSqlTableModel *m_model;
+    int curRecNo;
+private slots:
+    void timerstart();
+    void on_startpushButton_clicked();
+    void on_currentRowChanged(const QModelIndex &current, const QModelIndex &previous);
 
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;

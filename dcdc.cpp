@@ -107,7 +107,7 @@ static bool find_dcdc_func_no(uint32_t func_no, uint32_t *index)
 }
 
 
-static void deal_with_frame(struct can_frame frame)
+void deal_with_frame(struct can_frame frame)
 {
     dcdc_can_id_u can_id_info = {0};
     can_id_info.id = frame.can_id;
@@ -196,84 +196,95 @@ static void deal_with_frame(struct can_frame frame)
 void test(void)
 {
 
-    std::ifstream file("bc.log");
-    std::string line;
+    // std::ifstream file("bc.log");
+    // std::string line;
 
-    if (!file.is_open())
-    {
-        std::cout << "open error" << std::endl;
-        return;
-    }
+    // if (!file.is_open())
+    // {
+    //     std::cout << "open error" << std::endl;
+    //     return;
+    // }
 
     struct can_frame frame;
-    while(std::getline(file, line))
-    {
-        std::regex re(R"zzz(\((\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d+)\)\s+(\w+)\s+([0-9a-fA-F]+)\s+\[\d\]\s+(([0-9a-fA-F]{2}(?:\s+[0-9a-fA-F]{2})*)?))zzz");
-        std::smatch match;
-        if (std::regex_search(line, match, re))
-        {
-            std::string datastr = match[1];
-            std::string timestr = match[2];
-            std::string can_idstr = match[4];
-            std::string can_data = match[5];
-            // std::cout << datastr << " "<< timestr << ":0x"<< can_idstr << " "<< can_data << std::endl;
-            struct can_frame frame = {0};
-            frame.can_id = std::stoi(can_idstr, nullptr, 16);
+    // while(std::getline(file, line))
+    // {
+    //     std::regex re(R"zzz(\((\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d+)\)\s+(\w+)\s+([0-9a-fA-F]+)\s+\[\d\]\s+(([0-9a-fA-F]{2}(?:\s+[0-9a-fA-F]{2})*)?))zzz");
+    //     std::smatch match;
+    //     if (std::regex_search(line, match, re))
+    //     {
+    //         std::string datastr = match[1];
+    //         std::string timestr = match[2];
+    //         std::string can_idstr = match[4];
+    //         std::string can_data = match[5];
+    //         // std::cout << datastr << " "<< timestr << ":0x"<< can_idstr << " "<< can_data << std::endl;
+    //         struct can_frame frame = {0};
+    //         frame.can_id = std::stoi(can_idstr, nullptr, 16);
 
-            std::istringstream iss(can_data);
-            std::string byteStr;
-            int index = 0;
-            bool frame_valid = true;
-            while (std::getline(iss, byteStr, ' ') && index < 8)
-            {
-                if (byteStr.empty())
-                {
-                    continue;
-                }
-                else
-                {
-                    try
-                    {
-                        frame.data[index] = static_cast<uint8_t>(std::stoi(byteStr, nullptr, 16));
-                    } catch (const std::invalid_argument & e)
-                    {
-                        std::cerr << " invalid argument" << e.what() << std::endl;
-                        frame_valid = false;
-                        break;  // 立即停止解析
-                    } catch (const std::out_of_range & e)
-                    {
-                        std::cerr << "out of range " << e.what() << std::endl;
-                        frame_valid = false;
-                        break;  // 立即停止解析
-                    }
-                }
-                ++index;
-            }
+    //         std::istringstream iss(can_data);
+    //         std::string byteStr;
+    //         int index = 0;
+    //         bool frame_valid = true;
+    //         while (std::getline(iss, byteStr, ' ') && index < 8)
+    //         {
+    //             if (byteStr.empty())
+    //             {
+    //                 continue;
+    //             }
+    //             else
+    //             {
+    //                 try
+    //                 {
+    //                     frame.data[index] = static_cast<uint8_t>(std::stoi(byteStr, nullptr, 16));
+    //                 } catch (const std::invalid_argument & e)
+    //                 {
+    //                     std::cerr << " invalid argument" << e.what() << std::endl;
+    //                     frame_valid = false;
+    //                     break;  // 立即停止解析
+    //                 } catch (const std::out_of_range & e)
+    //                 {
+    //                     std::cerr << "out of range " << e.what() << std::endl;
+    //                     frame_valid = false;
+    //                     break;  // 立即停止解析
+    //                 }
+    //             }
+    //             ++index;
+    //         }
 
-            if (frame_valid && 7 == index)
-            {
-                frame.can_dlc = 8;
-                deal_with_frame(frame);
-            }
-        }
-        else
-        {
-            std::cout << "regex error:" << line <<std::endl;
-        }
-    }
-    file.close();
+    //         if (frame_valid && 7 == index)
+    //         {
+    //             frame.can_dlc = 8;
+    //             deal_with_frame(frame);
+    //         }
+    //     }
+    //     else
+    //     {
+    //         std::cout << "regex error:" << line <<std::endl;
+    //     }
+    // }
+    // file.close();
 
-    // frame.can_id = 0x86083F80;
-    // frame.can_dlc = 8;
-    // frame.data[0] = 0x03;
-    // frame.data[1] = 0x00;
-    // frame.data[2] = 0x00;
-    // frame.data[3] = 0x21;
-    // frame.data[4] = 0x43;
-    // frame.data[5] = 0xB4;
-    // frame.data[6] = 0xE6;
-    // frame.data[7] = 0x66;
-    // deal_with_frame(frame);
+    frame.can_id = 0x860F8019;
+    frame.can_dlc = 8;
+    // 41 F0 00 05 43 F9 88 00
+    frame.data[0] = 0x41;
+    frame.data[1] = 0xF0;
+    frame.data[2] = 0x00;
+    frame.data[3] = 0x05;
+    frame.data[4] = 0x43;
+    frame.data[5] = 0xf9;
+    frame.data[6] = 0x88;
+    frame.data[7] = 0x00;
+    dcdc_can_id_u canID{};
+    canID.id = frame.can_id;
+
+    std::cout << "group: " << canID.can_id_info.group << std::endl;      // 1
+    std::cout << "src_addr: " << canID.can_id_info.src_addr << std::endl; // 0
+    std::cout << "dst_addr: " << canID.can_id_info.dst_addr << std::endl; // 15 (0x0F)
+    std::cout << "ptp: " << canID.can_id_info.ptp << std::endl;           // 1
+    std::cout << "protno: " << canID.can_id_info.protno << std::endl;     // 24
+    std::cout << "reserved: " << canID.can_id_info.reserved << std::endl; // 4
+
+    deal_with_frame(frame);
     // frame.data[3] = 0x23;
     // deal_with_frame(frame);
     // dcdc_can_id_u canId{};
@@ -281,9 +292,9 @@ void test(void)
     // std::cout << "dc[" << canId.can_id_info.dst_addr << "]" << g_dcdc[canId.can_id_info.dst_addr - 1].get_output_vol() <<" " << g_dcdc[canId.can_id_info.dst_addr - 1].get_set_output_vol() << std::endl;
 }
 
-int main(void)
-{
-    test();
-    return 0;
-}
+// int main(void)
+// {
+//     test();
+//     return 0;
+// }
 
