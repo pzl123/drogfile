@@ -1,7 +1,8 @@
 #include "dcdc_set.h"
 #include "dc_dc_recv.h"
+#include "widget.h"
 
-#include <linux/can.h>
+
 #include <string.h>
 #include <arpa/inet.h>
 
@@ -25,12 +26,12 @@ static uint32_t frame_from_dcdc_index(struct can_frame frame)
 
 
 template <typename SetterFunc>
-void frame_to_set(const can_frame &frame, SetterFunc setter, bool is_float = true)
+void frame_to_set(Widget *widget_m, const can_frame &frame, SetterFunc setter, bool is_float = true)
 {
     dcdc_can_id_u canId{};
     canId.id = frame.can_id;
 
-    dcdc *dc = get_g_dcdc_info();
+    dcdc *dc = widget_m->getdcdcArray();
     recv_data_t data = {0};
     if (is_float)
     {
@@ -95,11 +96,11 @@ void frame_to_set(const can_frame &frame, SetterFunc setter, bool is_float = tru
 }
 
 template <typename SetterFunc, typename EnumType>
-void frame_to_set(const can_frame& frame, SetterFunc setter, EnumType*)
+void frame_to_set(Widget *widget_m, const can_frame& frame, SetterFunc setter, EnumType*)
 {
     dcdc_can_id_u canId{};
     canId.id = frame.can_id;
-    dcdc* dc = get_g_dcdc_info();
+    dcdc* dc = widget_m->getdcdcArray();
     recv_data_t data = {0};
     recv_data_pre(frame, &data);
     uint32_t raw_value = data.data;
@@ -139,44 +140,44 @@ void frame_to_set(const can_frame& frame, SetterFunc setter, EnumType*)
 }
 
 
-void frame2set_output_vol(struct can_frame frame)
+void frame2set_output_vol(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(frame, &dcdc::set_set_output_vol);
+    frame_to_set(widget_m, frame, &dcdc::set_set_output_vol);
 }
 
-void frame2set_output_vol_max(struct can_frame frame)
+void frame2set_output_vol_max(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(frame, &dcdc::set_set_output_vol_max);
+    frame_to_set(widget_m, frame, &dcdc::set_set_output_vol_max);
 }
-void frame2set_output_cur(struct can_frame frame)
+void frame2set_output_cur(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(frame, &dcdc::set_set_output_cur);
+    frame_to_set(widget_m, frame, &dcdc::set_set_output_cur);
 }
-void frame2set_output_pwr(struct can_frame frame)
+void frame2set_output_pwr(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(frame, &dcdc::set_set_output_pwr);
+    frame_to_set(widget_m, frame, &dcdc::set_set_output_pwr);
 }
-void frame2set_switch_state(struct can_frame frame)
+void frame2set_switch_state(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(frame, &dcdc::set_set_switch_state, (switch_state_e*)nullptr);
+    frame_to_set(widget_m, frame, &dcdc::set_set_switch_state, (switch_state_e*)nullptr);
 }
-void frame2set_group_num(struct can_frame frame)
+void frame2set_group_num(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(frame, &dcdc::set_set_group_num, false);
+    frame_to_set(widget_m, frame, &dcdc::set_set_group_num, false);
 }
-void frame2set_work_altitude(struct can_frame frame)
+void frame2set_work_altitude(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(frame, &dcdc::set_set_work_altitude, false);
+    frame_to_set(widget_m, frame, &dcdc::set_set_work_altitude, false);
 }
-void frame2set_over_vol_reset(struct can_frame frame)
+void frame2set_over_vol_reset(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(frame, &dcdc::set_set_over_vol_reset, (over_vol_reset_e*)nullptr);
+    frame_to_set(widget_m, frame, &dcdc::set_set_over_vol_reset, (over_vol_reset_e*)nullptr);
 }
-void frame2set_over_vol_protect(struct can_frame frame)
+void frame2set_over_vol_protect(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(frame, &dcdc::set_set_over_vol_protect, (over_vol_protect_e*)nullptr);
+    frame_to_set(widget_m, frame, &dcdc::set_set_over_vol_protect, (over_vol_protect_e*)nullptr);
 }
-void frame2set_sc_reset(struct can_frame frame)
+void frame2set_sc_reset(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(frame, &dcdc::set_set_sc_reset, (sc_reset_e*)nullptr);
+    frame_to_set(widget_m, frame, &dcdc::set_set_sc_reset, (sc_reset_e*)nullptr);
 }

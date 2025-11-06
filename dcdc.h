@@ -1,12 +1,15 @@
 #ifndef DCDC_H
 #define DCDC_H
 
+#include <QObject>
 #include <iostream>
 
 #include <unistd.h>
 #include <cstdint>
 
 #include "dcdc_set.h"
+
+class Widget;
 
 #define DCDC_NUM (12U)
 #define NORMAL_PROTNO 0x060
@@ -276,7 +279,19 @@ private:
     dc_set_msg_t dc_set_msg{}; // 值初始化为 0
 };
 
+
+class dcdc_manager:public QObject
+{
+    Q_OBJECT
+signals:
+    void outputVoltageChanged(int index, float voltage);  // 发射这个信号
+    void outputPowerChanged(int index, float power);
+public:
+    dcdc_manager();
+};
+
 dcdc *get_g_dcdc_info(void);
-void deal_with_frame(struct can_frame frame);
+// dcdc_manager *get_g_dcdc_manager();
+void deal_with_frame(Widget *widget_m, struct can_frame frame);
 
 #endif

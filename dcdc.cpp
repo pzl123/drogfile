@@ -1,9 +1,11 @@
 #include "dcdc.h"
 #include "dc_dc_recv.h"
+#include "widget.h"
 
 #include <fstream>
 #include <string>
 #include <regex>
+#include <string>
 
 #include <linux/can.h>
 
@@ -49,7 +51,7 @@ dcdc::~dcdc()
 typedef struct
 {
     uint32_t func_no;
-    int32_t (*on_recv_func)(struct can_frame frame);
+    int32_t (*on_recv_func)(Widget *widget_m, struct can_frame frame);
 } dc_recv_func_map_t;
 static dc_recv_func_map_t g_dc_recv_func_map[] = {
     {.func_no = GET_MODE_OUTPUT_VOL,                      .on_recv_func = &recv_get_mode_out_vol},
@@ -85,12 +87,6 @@ static dc_recv_func_map_t g_dc_recv_func_map[] = {
     {.func_no = GET_MODE_PFC_SOFTWARE_VER,                .on_recv_func = &recv_get_mode_pfc_soft_ver}
 };
 
-static dcdc g_dcdc[DCDC_NUM];
-
-dcdc *get_g_dcdc_info(void)
-{
-    return g_dcdc;
-}
 
 static bool find_dcdc_func_no(uint32_t func_no, uint32_t *index)
 {
@@ -107,7 +103,7 @@ static bool find_dcdc_func_no(uint32_t func_no, uint32_t *index)
 }
 
 
-void deal_with_frame(struct can_frame frame)
+void deal_with_frame(Widget *widget_m, struct can_frame frame)
 {
     dcdc_can_id_u can_id_info = {0};
     can_id_info.id = frame.can_id;
@@ -123,36 +119,36 @@ void deal_with_frame(struct can_frame frame)
         switch (func_no)
         {
         case SET_MODE_WORK_ALTITUDE:
-            frame2set_output_vol(frame);
+            frame2set_output_vol(widget_m, frame);
             break;
         case SET_MODE_OUTPUT_CUR:
-            frame2set_output_cur(frame);
+            frame2set_output_cur(widget_m, frame);
             break;
         case SET_MODE_GROUP_NUM:
-            frame2set_group_num(frame);
+            frame2set_group_num(widget_m, frame);
             break;
         case SET_MODE_ADDR_ALLOC_METH:
             break;
         case SET_MODE_OUTPUT_PWR:
-            frame2set_output_pwr(frame);
+            frame2set_output_pwr(widget_m, frame);
             break;
         case SET_MODE_OUTPUT_VOL:
-            frame2set_output_vol(frame);
+            frame2set_output_vol(widget_m, frame);
             break;
         case SET_MODE_OUTPUT_VOL_MAX:
-            frame2set_output_vol_max(frame);
+            frame2set_output_vol_max(widget_m, frame);
             break;
         case SET_MODE_SWITCH:
-            frame2set_switch_state(frame);
+            frame2set_switch_state(widget_m, frame);
             break;
         case SET_MODE_OVER_VOL_RESET:
-            frame2set_over_vol_reset(frame);
+            frame2set_over_vol_reset(widget_m, frame);
             break;
         case SET_MODE_OUT_OVER_VOL_PROTECTION_RELATED:
-            frame2set_over_vol_protect(frame);
+            frame2set_over_vol_protect(widget_m, frame);
             break;
         case SET_MODE_SC_RESET:
-            frame2set_sc_reset(frame);
+            frame2set_sc_reset(widget_m, frame);
             break;
         default:
             break;
@@ -180,7 +176,7 @@ void deal_with_frame(struct can_frame frame)
                 }
                 else
                 {
-                    (void)g_dc_recv_func_map[func_index].on_recv_func(frame);
+                    (void)g_dc_recv_func_map[func_index].on_recv_func(widget_m, frame);
                     return;
                 }
             }
@@ -284,7 +280,7 @@ void test(void)
     std::cout << "protno: " << canID.can_id_info.protno << std::endl;     // 24
     std::cout << "reserved: " << canID.can_id_info.reserved << std::endl; // 4
 
-    deal_with_frame(frame);
+    // deal_with_frame(frame);
     // frame.data[3] = 0x23;
     // deal_with_frame(frame);
     // dcdc_can_id_u canId{};
@@ -292,9 +288,15 @@ void test(void)
     // std::cout << "dc[" << canId.can_id_info.dst_addr << "]" << g_dcdc[canId.can_id_info.dst_addr - 1].get_output_vol() <<" " << g_dcdc[canId.can_id_info.dst_addr - 1].get_set_output_vol() << std::endl;
 }
 
+/* g++ dcdc.cpp dcdc.h dc_dc_recv.cpp dc_dc_recv.h dcdc_set.cpp dcdc_set.h -g -o dcdc && ./dcdc */
+// static void ssss(struct can_frame frame)
+// {
+//     printf("hello world");
+// }
 // int main(void)
 // {
-//     test();
+//     // test();
+//     ssss();
 //     return 0;
 // }
 

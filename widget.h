@@ -1,6 +1,8 @@
 #ifndef WIDGET_H
 #define WIDGET_H
 
+#include "dcdc.h"
+
 #include <QWidget>
 #include <QTimer>
 #include <QSqlTableModel>
@@ -24,16 +26,35 @@ class Widget : public QWidget
 public:
     Widget(QWidget *parent = nullptr);
     ~Widget();
+    void set_output_voL(float32_t value);
+    Ui::Widget* getui() { return ui; }
+    QTimer* gettimer() { return m_timer; }
+    QSqlTableModel* getmodel() { return m_model; }
+    QSqlDatabase& getdatabase() { return db; }
+    int *getcurRecNo(){ return &curRecNo; }
+    dcdc* getdcdcArray() { return dcdc_m; }
+    dcdc& getdcdcAt(int index) {
+        Q_ASSERT(index >= 0 && index < DCDC_NUM);
+        return dcdc_m[index];
+    }
+
 
 private:
     Ui::Widget *ui;
     QTimer *m_timer;
     QSqlTableModel *m_model;
+    QSqlDatabase db;
     int curRecNo;
+    dcdc dcdc_m[DCDC_NUM];
+
+signals:
+    void outputVoltageChanged(int index, float voltage);  // 发射这个信号
+    void outputPowerChanged(int index, float power);
+
 private slots:
-    void timerstart();
     void on_startpushButton_clicked();
-    void on_currentRowChanged(const QModelIndex &current, const QModelIndex &previous);
+    void onOutputVoltageChanged(int index, float voltage);
+    void timerstart();
 
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;

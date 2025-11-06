@@ -45,6 +45,7 @@ else()
     else()
         add_executable(drogfile
             ${PROJECT_SOURCES}
+            dcdc_table_model.h dcdc_table_model.cpp
         )
     endif()
 endif()

@@ -6,14 +6,14 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>969</width>
-    <height>505</height>
+    <width>1118</width>
+    <height>554</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Widget</string>
   </property>
-  <widget class="QWidget" name="">
+  <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
     <rect>
      <x>9</x>
@@ -35,7 +35,7 @@
     </item>
    </layout>
   </widget>
-  <widget class="QWidget" name="">
+  <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
     <rect>
      <x>9</x>
@@ -112,7 +112,7 @@
     </rect>
    </property>
   </widget>
-  <widget class="QWidget" name="">
+  <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
     <rect>
      <x>160</x>
@@ -133,6 +133,16 @@
      </widget>
     </item>
    </layout>
+  </widget>
+  <widget class="QTableView" name="dcdctableView">
+   <property name="geometry">
+    <rect>
+     <x>785</x>
+     <y>71</y>
+     <width>311</width>
+     <height>371</height>
+    </rect>
+   </property>
   </widget>
  </widget>
  <resources/>
