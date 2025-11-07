@@ -3,6 +3,7 @@
 #include <regex>
 #include <fstream>
 #include <string>
+#include <vector>
 
 using namespace std;
 
@@ -131,67 +132,129 @@ void print_insert_frame(linestr_2_dbinfo_t insert_msg)
     printf("\n");
 }
 
+static int select_callback(void *data, int argc, char **argv, char **azColName)
+{
+    auto* result_vec = static_cast<std::vector<linestr_2_dbinfo_t>*>(data);
+
+    linestr_2_dbinfo_t insert_msg{};
+
+    for (int i = 0; i < argc; i++)
+    {
+        std::string col_name = azColName[i];
+        std::string value = argv[i] ? argv[i] : "";
+        if ("id" == col_name)
+        {
+        }
+        else if ("timestamp")
+        {
+            insert_msg.timestamp = value;
+        }
+        else if ("can_id")
+        {
+            insert_msg.can_id = static_cast<unsigned int>(std::stoi(value));
+        }
+        else if ("can_len")
+        {
+            insert_msg.can_len = static_cast<unsigned int>(std::stoi(value));
+        }
+        else if (col_name.substr(0, 9) == "can_data")
+        {
+            int idx = col_name[9] - '0'; // "can_data0" → idx=0
+            if (idx >= 0 && idx < 8)
+            {
+                insert_msg.can_data[idx] = static_cast<unsigned int>(std::stoi(value));
+            }
+        }
+    }
+    result_vec->push_back(insert_msg);
+    return 0;
+}
+
+void select_timestamp_between(std::string timestamp1, std::string timestamp2, std::string table_name,sqlite3 *db)
+{
+    std::string select_str = "select * from " + table_name + \
+    " where timestamp between " + "'"  + timestamp1 + "'"+ " and " + "'"  + timestamp2 + "'" + \
+    " order by id";
+    std::cout << select_str << std::endl;
+    char *err_msg;
+    vector<linestr_2_dbinfo_t> insert_msg(0);
+    // std::cout << "vector num: " << insert_msg.size() << std::endl;
+    int rc = sqlite3_exec(db, select_str.c_str(), select_callback, (void *)&insert_msg, &err_msg);
+    if (rc != SQLITE_OK)
+    {
+        std::cerr << "SQL error: " << err_msg << std::endl;
+        sqlite3_free(err_msg);
+    }
+    // std::cout << "vector num: " << insert_msg.size() << std::endl;
+}
+
 void handle_can_log(std::string &log_path)
 {
     std::ifstream log(log_path.c_str());
     std::string line;
     if (!log.is_open())
     {
-        std::cerr << "无法打开文件！" << std::endl;
+        std::cerr << "open db error" << std::endl;
         return;
     }
 
     sqlite3 *db = open_db("./aaaa.db");
     std::string table_name = "dcdc_frame";
-    string create_table_str = "CREATE TABLE IF NOT EXISTS " + table_name + "(id INTEGER PRIMARY KEY, timestamp TEXT, \
-        can_id INTEGER, \
-        can_len INTEGER,\
-        can_data0 INTEGER, \
-        can_data1 INTEGER, \
-        can_data2 INTEGER, \
-        can_data3 INTEGER, \
-        can_data4 INTEGER, \
-        can_data5 INTEGER, \
-        can_data6 INTEGER, \
-        can_data7 INTEGER)";
-    drop_table_in_db(table_name, db);
-    create_table_in_db(create_table_str, db);
 
-    sqlite3_stmt *stmt;
-    const char *sql = "INSERT INTO dcdc_frame(timestamp, can_id, can_len, \
-        can_data0, \
-        can_data1, \
-        can_data2, \
-        can_data3, \
-        can_data4, \
-        can_data5, \
-        can_data6, \
-        can_data7) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    string timestamps1 = "2025-10-27 15:47:23.619018";
+    string timestamps2 = "2025-10-27 15:47:23.668022";
+    select_timestamp_between(timestamps1, timestamps2, table_name, db);
 
-    while (std::getline(log, line))
-    {
-        // std::cout << line << std::endl;
-        linestr_2_dbinfo_t insert_msg;
-        string_info_2_dcdc_insert_msg(line, insert_msg);
-        // print_insert_frame(insert_msg);
-        sqlite3_reset(stmt);
-        sqlite3_bind_text(stmt, 1, insert_msg.timestamp.c_str(), -1, SQLITE_STATIC);
-        sqlite3_bind_int(stmt, 2, insert_msg.can_id);
-        sqlite3_bind_int(stmt, 3, insert_msg.can_len);
-        for (unsigned int i = 0U; i < insert_msg.can_len; i++)
-        {
-            sqlite3_bind_int(stmt, i + 4, insert_msg.can_data[i]);
-            // std::cout << "data[" << i + 1 << "]: " << insert_msg.can_data[i] << std::endl;
-        }
+    // string create_table_str = "CREATE TABLE IF NOT EXISTS " + table_name + "(id INTEGER PRIMARY KEY, timestamp TEXT, \
+    //     can_id INTEGER, \
+    //     can_len INTEGER,\
+    //     can_data0 INTEGER, \
+    //     can_data1 INTEGER, \
+    //     can_data2 INTEGER, \
+    //     can_data3 INTEGER, \
+    //     can_data4 INTEGER, \
+    //     can_data5 INTEGER, \
+    //     can_data6 INTEGER, \
+    //     can_data7 INTEGER)";
+    // drop_table_in_db(table_name, db);
+    // create_table_in_db(create_table_str, db);
 
-        rc = sqlite3_step(stmt);
-        if (rc != SQLITE_DONE)
-        {
-            std::cout << "Execution failed: " << sqlite3_errmsg(db) << std::endl;
-        }
-    }
-    sqlite3_finalize(stmt);
+    // sqlite3_stmt *stmt;
+    // const char *sql = "INSERT INTO dcdc_frame(timestamp, can_id, can_len, \
+    //     can_data0, \
+    //     can_data1, \
+    //     can_data2, \
+    //     can_data3, \
+    //     can_data4, \
+    //     can_data5, \
+    //     can_data6, \
+    //     can_data7) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    // int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+
+    // while (std::getline(log, line))
+    // {
+    //     // std::cout << line << std::endl;
+    //     linestr_2_dbinfo_t insert_msg;
+    //     string_info_2_dcdc_insert_msg(line, insert_msg);
+    //     // print_insert_frame(insert_msg);
+    //     sqlite3_reset(stmt);
+    //     sqlite3_bind_text(stmt, 1, insert_msg.timestamp.c_str(), -1, SQLITE_STATIC);
+    //     sqlite3_bind_int(stmt, 2, insert_msg.can_id);
+    //     sqlite3_bind_int(stmt, 3, insert_msg.can_len);
+    //     for (unsigned int i = 0U; i < insert_msg.can_len; i++)
+    //     {
+    //         sqlite3_bind_int(stmt, i + 4, insert_msg.can_data[i]);
+    //         // std::cout << "data[" << i + 1 << "]: " << insert_msg.can_data[i] << std::endl;
+    //     }
+
+    //     rc = sqlite3_step(stmt);
+    //     if (rc != SQLITE_DONE)
+    //     {
+    //         std::cout << "Execution failed: " << sqlite3_errmsg(db) << std::endl;
+    //     }
+    // }
+    // sqlite3_finalize(stmt);
+
 }
 
 /* g++ dcdc_database.cpp dcdc_database.h -g -o test && ./test */
