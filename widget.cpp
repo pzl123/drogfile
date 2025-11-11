@@ -15,11 +15,15 @@
 #include <QTime>
 #include <QTimer>
 #include <QStyle>
+#include <QSqlDriver>
 
 #include <random>
+#include <regex>
 
 #include <linux/can.h>
 #include "dcdc.h"
+
+
 
 static void processLine(Widget *widget_m, const QString &line)
 {
@@ -76,20 +80,20 @@ static void model_init(QSqlDatabase &db, QSqlTableModel *model)
         qDebug() << "CREATE TABLE 失败:" << query.lastError().text();
     }
 
-    model->setTable("student");
+    model->setTable("dcdc_frame");
 
     if (!model->select())
     {
         qDebug() << "select() 失败:" << model->lastError().text();
     }
 
-    int idCol = model->fieldIndex("id");
-    int nameCol = model->fieldIndex("name");
-    int gradesCol = model->fieldIndex("grades");
+    // int idCol = model->fieldIndex("id");
+    // int nameCol = model->fieldIndex("name");
+    // int gradesCol = model->fieldIndex("grades");
 
-    model->setHeaderData(idCol, Qt::Horizontal, "id");
-    model->setHeaderData(nameCol, Qt::Horizontal, "name");
-    model->setHeaderData(gradesCol, Qt::Horizontal, "grades");
+    // model->setHeaderData(idCol, Qt::Horizontal, "id");
+    // model->setHeaderData(nameCol, Qt::Horizontal, "name");
+    // model->setHeaderData(gradesCol, Qt::Horizontal, "grades");
 }
 
 void Widget::timerstart()
@@ -127,9 +131,11 @@ Widget::Widget(QWidget *parent)
     ui->setupUi(this);
     curRecNo = 0;
     ui->timelineEdit->setText("1000");
-    db = QSqlDatabase::addDatabase("QSQLITE");
-    db.setDatabaseName("/home/zlgmcu/Desktop/qt_project/drogfile/drogfile.db");
-    if (db.open())
+
+    QString data_path = "/home/zlgmcu/Desktop/qt_project/drogfile/drogfile.db";
+    QString table_name = "dcdc_frame";
+    QString conn_name = "dcdc";
+    if (open_database(data_path, table_name, conn_name))
     {
         m_model = new QSqlTableModel(this, db);
         model_init(db, m_model);
@@ -142,7 +148,7 @@ Widget::Widget(QWidget *parent)
         ui->m_tableView->setSelectionModel(theSelection);
         ui->m_tableView->setSelectionBehavior(QAbstractItemView::SelectRows);
         ui->m_tableView->setSelectionMode(QAbstractItemView::SingleSelection);
-        ui->m_tableView->hideColumn(0);
+        // ui->m_tableView->hideColumn(0);
         if (m_model->columnCount() > 1)
         {
             QHeaderView *header = ui->m_tableView->horizontalHeader();
@@ -161,6 +167,95 @@ Widget::Widget(QWidget *parent)
 Widget::~Widget()
 {
     delete ui;
+}
+
+bool Widget::open_database(const QString& data_path, const QString& table_name, const QString& conn_name)
+{
+    if (QSqlDatabase::contains(conn_name))
+    {
+        QSqlDatabase::removeDatabase(conn_name);
+        // db = QSqlDatabase::database(conn_name);
+    }
+
+    db = QSqlDatabase::addDatabase("QSQLITE", conn_name);
+    // db.setHostName("aaaaa");
+    db.setDatabaseName(data_path);
+    // db.setUserName("dbuse");
+    // db.setPassword("dbpassword");
+
+    if (!db.open())
+    {
+        QMessageBox::critical(this, "Error", "Failed to open database. path :" + data_path + "database error: " + db.lastError().text());
+        return false;
+    }
+
+    drop_table_in_db(table_name);
+    create_table_in_db(table_name);
+    return true;
+}
+
+void Widget::close_database()
+{
+    if (db.isOpen())
+    {
+        db.close();
+    }
+}
+
+void Widget::drop_table_in_db(const QString& table_name)
+{
+    QString delete_str = "DROP TABLE IF EXISTS ";
+    QString final_str = delete_str + table_name;
+
+    if (!db.isValid() || !db.isOpen())
+    {
+        qWarning() << "Database connection is invalid or not open.";
+        return;
+    }
+
+    QSqlQuery query(db);
+    if (!query.exec(final_str))
+    {
+        qWarning() << "Failed to drop table" << table_name
+                   << ": " << query.lastError().text();
+    }
+}
+
+void Widget::create_table_in_db(const QString &table_name)
+{
+    QString create_str = "CREATE TABLE IF NOT EXISTS " + table_name + "(id INTEGER PRIMARY KEY, timestamp TEXT, \
+        can_id INTEGER, \
+        can_len INTEGER,\
+        can_data0 INTEGER, \
+        can_data1 INTEGER, \
+        can_data2 INTEGER, \
+        can_data3 INTEGER, \
+        can_data4 INTEGER, \
+        can_data5 INTEGER, \
+        can_data6 INTEGER, \
+        can_data7 INTEGER)";
+
+    if (!db.isValid() || !db.isOpen())
+    {
+        qWarning() << "Database connection is invalid or not open.";
+        return;
+    }
+
+    QSqlQuery query(db);
+    if (!query.exec(create_str))
+    {
+        qWarning() << "Failed to create table" << table_name
+                   << ": " << query.lastError().text();
+    }
+}
+
+void Widget::display_all_db_class()
+{
+    QStringList drives = QSqlDatabase::drivers();
+    foreach (QString driver, drives)
+    {
+        qDebug() << driver;
+    }
 }
 
 void Widget::dragEnterEvent(QDragEnterEvent *event)
@@ -187,6 +282,63 @@ void Widget::dragEnterEvent(QDragEnterEvent *event)
     }
 }
 
+static int32_t split_str_2_frame_data(std::string& str, unsigned int *data, unsigned int max_len)
+{
+    if (23 != str.size())
+    {
+        return -1;
+    }
+    std::regex re(R"(^([0-9a-fA-F]{2})\s+([0-9a-fA-F]{2})\s+([0-9a-fA-F]{2})\s+([0-9a-fA-F]{2})\s+([0-9a-fA-F]{2})\s+([0-9a-fA-F]{2})\s+([0-9a-fA-F]{2})\s+([0-9a-fA-F]{2})$)");
+    std::smatch match;
+    if (std::regex_match(str, match, re))
+    {
+        for (size_t i = 1; i <= 8; ++i)
+        {
+            data[i-1] = static_cast<unsigned int>(std::stoi(match[i].str(), nullptr, 16));
+            // data[i-1] = static_cast<unsigned int>(data[i-1]);
+            // std::cout << "data[" << (i-1) << "]: "<< std::hex << data[i-1] << " " << std::endl;
+        }
+    }
+    else
+    {
+        std::cout << "error regex_match:" << str << std::endl;
+    }
+    return 0;
+}
+
+static void string_info_2_dcdc_insert_msg(QString& line_str_, linestr_2_dbinfo_t &insert_msg)
+{
+    std::string line_str = line_str_.toStdString();
+    std::regex re(R"(\((\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d+)\)\s+(\w+)\s+([0-9a-zA-Z]+)\s+\[(\d)\]\s+(([0-9a-zA-Z]){2}(?:\s+[0-9a-zA-Z]{2})*))");
+    std::smatch match;
+    if (std::regex_search(line_str, match, re))
+    {
+        std::cout << "data:" << match[1] << std::endl;
+        std::cout << "time:" << match[2] << std::endl;
+        std::cout << "can_itf:" << match[3] << std::endl;
+        std::cout << "can_id:" << match[4] << std::endl;
+        std::cout << "can_len:" << match[5] << std::endl;
+        std::cout << "can_data:" << match[6] << std::endl;
+    }
+    else
+    {
+        std::cout << "regex error:" << line_str << std::endl;
+        return;
+    }
+    insert_msg.can_id = static_cast<unsigned int>(std::stoi(match[4].str(), nullptr, 16));
+    insert_msg.can_len =  static_cast<uint8_t>(std::stoi(match[5].str(), NULL, 10));
+    insert_msg.timestamp  = match[1].str() + " " + match[2].str();
+    std::string can_data_str = match[6].str();
+    if (insert_msg.can_len <= MAX_LEN)
+    {
+        if (-1 == split_str_2_frame_data(can_data_str, insert_msg.can_data, MAX_LEN))
+        {
+            std::cout << "split str error: " << can_data_str << std::endl;
+            return;
+        }
+    }
+}
+
 
 void Widget::dropEvent(QDropEvent *event)
 {
@@ -209,42 +361,71 @@ void Widget::dropEvent(QDropEvent *event)
     }
 
     QTextStream in(&file);
-    QSqlQuery query(db);
+
 
     // 开启事务
-    db.transaction();
+    QSqlDriver *drv = db.driver();
 
-    int lineNumber = 1;
-    while (!in.atEnd())
+    if (drv && drv->hasFeature(QSqlDriver::Transactions))
     {
-        QString line = in.readLine();
+        db.transaction();
 
-        // 正确写法：插入到 logstr 字段
-        query.prepare("INSERT INTO student (logstr) VALUES (?)");
-        query.addBindValue(line);  // 绑定 line 变量的内容
+        QString sql = QString("INSERT INTO %1 (timestamp, can_id, can_len, can_data0, can_data1, can_data2, can_data3, can_data4, can_data5, can_data6, can_data7) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").arg("dcdc_frame");
+        qDebug() << sql;
 
-        if (!query.exec())
+
+        int lineNumber = 1;
+        while (!in.atEnd())
         {
-            // qDebug() << "第" << lineNumber << "行插入失败:" << query.lastError().text();
-        } else {
-            // qDebug() << "第" << lineNumber << "行插入成功:" << line;
+            QString line = in.readLine();
+            linestr_2_dbinfo_t msg{};
+            msg.id = lineNumber;
+            string_info_2_dcdc_insert_msg(line, msg);
+
+            QSqlQuery query(db);
+            query.prepare(sql);
+
+            query.addBindValue(QString::fromStdString(msg.timestamp));
+            query.addBindValue(msg.can_id);
+            query.addBindValue(msg.can_len);
+
+            for (int i = 0; i < 8; ++i)
+            {
+                if (i < msg.can_len)
+                {
+                    query.addBindValue(msg.can_data[i]);
+                }
+                else
+                {
+                    query.addBindValue(0);
+                }
+            }
+
+
+            if (!query.exec())
+            {
+                // qDebug() << "第" << lineNumber << "行插入失败:" << query.lastError().text();
+            } else {
+                // qDebug() << "第" << lineNumber << "行插入成功:" << line;
+            }
+            // query.clear();
+            lineNumber++;
         }
-        lineNumber++;
+
+        file.close();
+
+        // 提交事务
+        if (!db.commit())
+        {
+            qDebug() << "transaction commit error:" << db.lastError().text();
+            db.rollback();  // 回滚
+        } else {
+            qDebug() << "all data insert success, commit transaction";
+        }
+        m_model->select();
+
+        ui->showplainTextEdit->appendPlainText(QString("import success, %1 row").arg(lineNumber - 1));
     }
-
-    file.close();
-
-    // 提交事务
-    if (!db.commit())
-    {
-        qDebug() << "transaction commit error:" << db.lastError().text();
-        db.rollback();  // 回滚
-    } else {
-        qDebug() << "all data insert success, commit transaction";
-    }
-    m_model->select();
-
-    ui->showplainTextEdit->appendPlainText(QString("import success， %1 row").arg(lineNumber - 1));
 }
 
 void Widget::resizeEvent(QResizeEvent *event)

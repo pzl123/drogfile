@@ -11,6 +11,17 @@
 
 class Widget;
 
+#define MAX_LEN 8
+
+typedef struct
+{
+    int id;
+    std::string timestamp;
+    unsigned int can_id;
+    unsigned int can_len;
+    unsigned int can_data[MAX_LEN];
+} linestr_2_dbinfo_t;
+
 #define DCDC_NUM (12U)
 #define NORMAL_PROTNO 0x060
 #define DCDC_POWER_GAIN (1000.f)

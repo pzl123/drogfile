@@ -42,7 +42,7 @@ sqlite3* open_db(const std::string& db_path)
     return db;
 }
 
-void exec_in_db(std::string &create_table_str, sqlite3* db)
+static void exec_in_db(std::string &create_table_str, sqlite3* db)
 {
     char *err_msg = NULL;
     int rc = sqlite3_exec(db, create_table_str.c_str(), 0, 0, &err_msg);
@@ -61,7 +61,7 @@ void drop_table_in_db(string& table_name, sqlite3 *db)
     exec_in_db(delete_str, db);
 }
 
-int32_t split_str_2_frame_data(std::string& str, unsigned int *data, unsigned int max_len)
+static int32_t split_str_2_frame_data(std::string& str, unsigned int *data, unsigned int max_len)
 {
     if (23 != str.size())
     {
@@ -85,7 +85,7 @@ int32_t split_str_2_frame_data(std::string& str, unsigned int *data, unsigned in
     return 0;
 }
 
-void string_info_2_dcdc_insert_msg(std::string& line_str, linestr_2_dbinfo_t &insert_msg)
+static void string_info_2_dcdc_insert_msg(std::string& line_str, linestr_2_dbinfo_t &insert_msg)
 {
     std::regex re(R"(\((\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d+)\)\s+(\w+)\s+([0-9a-zA-Z]+)\s+\[(\d)\]\s+(([0-9a-zA-Z]){2}(?:\s+[0-9a-zA-Z]{2})*))");
     std::smatch match;
@@ -304,8 +304,8 @@ void handle_can_log(std::string &log_path)
 }
 
 /* g++ dcdc_database.cpp dcdc_database.h -g -o test && ./test */
-int main()
-{
-    std::string log_path = "./bc.log";
-    handle_can_log(log_path);
-}
+// int main()
+// {
+//     std::string log_path = "./bc.log";
+//     handle_can_log(log_path);
+// }

@@ -2,6 +2,7 @@
 #define DCDC_TABLE_MODEL_H
 
 #include <QAbstractTableModel>
+#include <QSqlDatabase>
 #include <QList>
 
 #include "dcdc.h"

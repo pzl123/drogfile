@@ -26,6 +26,12 @@ class Widget : public QWidget
 public:
     Widget(QWidget *parent = nullptr);
     ~Widget();
+    bool open_database(const QString& data_path, const QString& table_name, const QString& conn_name);
+    void close_database();
+    void drop_table_in_db(const QString& table_name);
+    void create_table_in_db(const QString& table_name);
+    void insert_msg_to_db(linestr_2_dbinfo_t& msg, const QString& table_name);
+    void display_all_db_class();
     void set_output_voL(float32_t value);
     Ui::Widget* getui() { return ui; }
     QTimer* gettimer() { return m_timer; }
