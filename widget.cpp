@@ -16,6 +16,7 @@
 #include <QTimer>
 #include <QStyle>
 #include <QSqlDriver>
+#include <QStandardItemModel>
 
 #include <random>
 #include <regex>
@@ -67,7 +68,7 @@ static void processLine(Widget *widget_m, const QString &line)
 }
 
 
-static void model_init(QSqlDatabase &db, QSqlTableModel *model)
+static void model_init(QSqlDatabase &db, QString& table_name, QSqlTableModel *model)
 {
     QSqlQuery query(db);
     // if (!query.exec("DROP TABLE IF EXISTS student"))
@@ -80,7 +81,7 @@ static void model_init(QSqlDatabase &db, QSqlTableModel *model)
         qDebug() << "CREATE TABLE 失败:" << query.lastError().text();
     }
 
-    model->setTable("dcdc_frame");
+    model->setTable(table_name);
 
     if (!model->select())
     {
@@ -129,16 +130,29 @@ Widget::Widget(QWidget *parent)
     , ui(new Ui::Widget)
 {
     ui->setupUi(this);
-    curRecNo = 0;
+    m_curRecNo = 0;
     ui->timelineEdit->setText("1000");
 
     QString data_path = "/home/zlgmcu/Desktop/qt_project/drogfile/drogfile.db";
     QString table_name = "dcdc_frame";
-    QString conn_name = "dcdc";
+    QString conn_name = "frame";
     if (open_database(data_path, table_name, conn_name))
     {
-        m_model = new QSqlTableModel(this, db);
-        model_init(db, m_model);
+        QString create_str = "CREATE TABLE IF NOT EXISTS " + table_name + "(id INTEGER PRIMARY KEY, timestamp TEXT, \
+            can_id INTEGER, \
+            can_len INTEGER,\
+            can_data0 INTEGER, \
+            can_data1 INTEGER, \
+            can_data2 INTEGER, \
+            can_data3 INTEGER, \
+            can_data4 INTEGER, \
+            can_data5 INTEGER, \
+            can_data6 INTEGER, \
+            can_data7 INTEGER)";
+        drop_table_in_db(table_name);
+        create_table_in_db(create_str ,table_name);
+        m_model = new QSqlTableModel(this, m_db);
+        model_init(m_db, table_name,  m_model);
 /*
  * 通过创建 QItemSelectionModel 对象 theSelection 并关联到 tabModel模型，将数据模型和选择模型关联到 ui->tableView，并设置选择模式为行选择模式。
  */
@@ -148,13 +162,27 @@ Widget::Widget(QWidget *parent)
         ui->m_tableView->setSelectionModel(theSelection);
         ui->m_tableView->setSelectionBehavior(QAbstractItemView::SelectRows);
         ui->m_tableView->setSelectionMode(QAbstractItemView::SingleSelection);
-        // ui->m_tableView->hideColumn(0);
+        ui->m_tableView->hideColumn(0);
         if (m_model->columnCount() > 1)
         {
             QHeaderView *header = ui->m_tableView->horizontalHeader();
             header->setSectionResizeMode(m_model->columnCount() - 1, QHeaderView::Stretch);
         }
     }
+
+    QStandardItemModel *m_dcdc_model = new QStandardItemModel(12, 7, this);
+    m_dcdc_model->setHorizontalHeaderItem(0, new QStandardItem("ID"));
+    m_dcdc_model->setHorizontalHeaderItem(1, new QStandardItem("vol"));
+    m_dcdc_model->setHorizontalHeaderItem(2, new QStandardItem("set_vol"));
+    m_dcdc_model->setHorizontalHeaderItem(3, new QStandardItem("cur"));
+    m_dcdc_model->setHorizontalHeaderItem(4, new QStandardItem("set_cur"));
+    m_dcdc_model->setHorizontalHeaderItem(5, new QStandardItem("switch"));
+    m_dcdc_model->setHorizontalHeaderItem(6, new QStandardItem("set_switch"));
+
+    ui->dcdc_msg_tableView->setModel(m_dcdc_model);
+    ui->dcdc_msg_tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+
+
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &Widget::timerstart);
 
@@ -177,28 +205,25 @@ bool Widget::open_database(const QString& data_path, const QString& table_name, 
         // db = QSqlDatabase::database(conn_name);
     }
 
-    db = QSqlDatabase::addDatabase("QSQLITE", conn_name);
+    m_db = QSqlDatabase::addDatabase("QSQLITE", conn_name);
     // db.setHostName("aaaaa");
-    db.setDatabaseName(data_path);
+    m_db.setDatabaseName(data_path);
     // db.setUserName("dbuse");
     // db.setPassword("dbpassword");
 
-    if (!db.open())
+    if (!m_db.open())
     {
-        QMessageBox::critical(this, "Error", "Failed to open database. path :" + data_path + "database error: " + db.lastError().text());
+        QMessageBox::critical(this, "Error", "Failed to open database. path :" + data_path + "database error: " + m_db.lastError().text());
         return false;
     }
-
-    drop_table_in_db(table_name);
-    create_table_in_db(table_name);
     return true;
 }
 
 void Widget::close_database()
 {
-    if (db.isOpen())
+    if (m_db.isOpen())
     {
-        db.close();
+        m_db.close();
     }
 }
 
@@ -207,13 +232,13 @@ void Widget::drop_table_in_db(const QString& table_name)
     QString delete_str = "DROP TABLE IF EXISTS ";
     QString final_str = delete_str + table_name;
 
-    if (!db.isValid() || !db.isOpen())
+    if (!m_db.isValid() || !m_db.isOpen())
     {
         qWarning() << "Database connection is invalid or not open.";
         return;
     }
 
-    QSqlQuery query(db);
+    QSqlQuery query(m_db);
     if (!query.exec(final_str))
     {
         qWarning() << "Failed to drop table" << table_name
@@ -221,27 +246,15 @@ void Widget::drop_table_in_db(const QString& table_name)
     }
 }
 
-void Widget::create_table_in_db(const QString &table_name)
+void Widget::create_table_in_db(QString create_str, const QString &table_name)
 {
-    QString create_str = "CREATE TABLE IF NOT EXISTS " + table_name + "(id INTEGER PRIMARY KEY, timestamp TEXT, \
-        can_id INTEGER, \
-        can_len INTEGER,\
-        can_data0 INTEGER, \
-        can_data1 INTEGER, \
-        can_data2 INTEGER, \
-        can_data3 INTEGER, \
-        can_data4 INTEGER, \
-        can_data5 INTEGER, \
-        can_data6 INTEGER, \
-        can_data7 INTEGER)";
-
-    if (!db.isValid() || !db.isOpen())
+    if (!m_db.isValid() || !m_db.isOpen())
     {
         qWarning() << "Database connection is invalid or not open.";
         return;
     }
 
-    QSqlQuery query(db);
+    QSqlQuery query(m_db);
     if (!query.exec(create_str))
     {
         qWarning() << "Failed to create table" << table_name
@@ -364,11 +377,11 @@ void Widget::dropEvent(QDropEvent *event)
 
 
     // 开启事务
-    QSqlDriver *drv = db.driver();
+    QSqlDriver *drv = m_db.driver();
 
     if (drv && drv->hasFeature(QSqlDriver::Transactions))
     {
-        db.transaction();
+        m_db.transaction();
 
         QString sql = QString("INSERT INTO %1 (timestamp, can_id, can_len, can_data0, can_data1, can_data2, can_data3, can_data4, can_data5, can_data6, can_data7) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").arg("dcdc_frame");
         qDebug() << sql;
@@ -382,7 +395,7 @@ void Widget::dropEvent(QDropEvent *event)
             msg.id = lineNumber;
             string_info_2_dcdc_insert_msg(line, msg);
 
-            QSqlQuery query(db);
+            QSqlQuery query(m_db);
             query.prepare(sql);
 
             query.addBindValue(QString::fromStdString(msg.timestamp));
@@ -415,10 +428,10 @@ void Widget::dropEvent(QDropEvent *event)
         file.close();
 
         // 提交事务
-        if (!db.commit())
+        if (!m_db.commit())
         {
-            qDebug() << "transaction commit error:" << db.lastError().text();
-            db.rollback();  // 回滚
+            qDebug() << "transaction commit error:" << m_db.lastError().text();
+            m_db.rollback();  // 回滚
         } else {
             qDebug() << "all data insert success, commit transaction";
         }
@@ -454,7 +467,7 @@ void Widget::on_startpushButton_clicked()
 void Widget::onOutputVoltageChanged(int index, float voltage)
 {
 
-    this->dcdc_m[index].set_output_vol(voltage);
-    ui->set_output_vol_lineEdit->setText(QString::number(this->dcdc_m[index].get_output_vol()));
+    this->m_dcdc[index].set_output_vol(voltage);
+    ui->set_output_vol_lineEdit->setText(QString::number(this->m_dcdc[index].get_output_vol()));
 
 }

@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1118</width>
-    <height>554</height>
+    <height>711</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -106,9 +106,9 @@
    <property name="geometry">
     <rect>
      <x>60</x>
-     <y>220</y>
-     <width>691</width>
-     <height>231</height>
+     <y>140</y>
+     <width>851</width>
+     <height>141</height>
     </rect>
    </property>
   </widget>
@@ -134,13 +134,13 @@
     </item>
    </layout>
   </widget>
-  <widget class="QTableView" name="dcdctableView">
+  <widget class="QTableView" name="dcdc_msg_tableView">
    <property name="geometry">
     <rect>
-     <x>785</x>
-     <y>71</y>
-     <width>311</width>
-     <height>371</height>
+     <x>55</x>
+     <y>300</y>
+     <width>861</width>
+     <height>391</height>
     </rect>
    </property>
   </widget>
