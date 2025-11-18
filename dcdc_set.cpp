@@ -15,6 +15,7 @@ void print_can_frame(const struct can_frame& frame)
         printf(" %02X", frame.data[i]);
     }
     printf("\n");
+    fflush(stdout);
 }
 
 static uint32_t frame_from_dcdc_index(struct can_frame frame)
@@ -42,7 +43,7 @@ void frame_to_set(Widget *widget_m, const can_frame &frame, SetterFunc setter, b
         recv_data_pre(frame, &data);
     }
     float32_t value_f = data.float_data;
-    float32_t value_u = data.data;
+    uint32_t value_u = data.data;
 
     if (0 == canId.can_id_info.ptp) /* 广播 */
     {
@@ -54,11 +55,11 @@ void frame_to_set(Widget *widget_m, const can_frame &frame, SetterFunc setter, b
                 {
                     if (is_float)
                     {
-                        (dc[i].*setter)(value_f);
+                        (dc[i].*setter)(frame, value_f);
                     }
                     else
                     {
-                        (dc[i].*setter)(value_u);
+                        (dc[i].*setter)(frame, value_u);
                     }
                 }
             }
@@ -69,11 +70,11 @@ void frame_to_set(Widget *widget_m, const can_frame &frame, SetterFunc setter, b
             {
                 if (is_float)
                 {
-                    (dc[i].*setter)(value_f);
+                    (dc[i].*setter)(frame, value_f);
                 }
                 else
                 {
-                    (dc[i].*setter)(value_u);
+                    (dc[i].*setter)(frame, value_u);
                 }
             }
         }
@@ -86,11 +87,11 @@ void frame_to_set(Widget *widget_m, const can_frame &frame, SetterFunc setter, b
     {
         if (is_float)
         {
-            (dc[canId.can_id_info.dst_addr - 1].*setter)(value_f);
+            (dc[canId.can_id_info.dst_addr - 1].*setter)(frame, value_f);
         }
         else
         {
-            (dc[canId.can_id_info.dst_addr - 1].*setter)(value_u);
+            (dc[canId.can_id_info.dst_addr - 1].*setter)(frame, value_u);
         }
     }
 }
@@ -117,7 +118,7 @@ void frame_to_set(Widget *widget_m, const can_frame& frame, SetterFunc setter, E
             {
                 if (canId.can_id_info.group == dc[i].get_group_num())
                 {
-                    (dc[i].*setter)(value);
+                    (dc[i].*setter)(frame, value);
                 }
             }
         }
@@ -125,7 +126,7 @@ void frame_to_set(Widget *widget_m, const can_frame& frame, SetterFunc setter, E
         {
             for (uint8_t i = 0; i < DCDC_NUM; ++i)
             {
-                (dc[i].*setter)(value);
+                (dc[i].*setter)(frame, value);
             }
         }
         else
@@ -135,7 +136,7 @@ void frame_to_set(Widget *widget_m, const can_frame& frame, SetterFunc setter, E
     }
     else
     {
-        (dc[dst - 1].*setter)(value);
+        (dc[dst - 1].*setter)(frame, value);
     }
 }
 
@@ -147,7 +148,7 @@ void frame2set_output_vol(Widget *widget_m, struct can_frame frame)
 
 void frame2set_output_vol_max(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(widget_m, frame, &dcdc::set_set_output_vol_max);
+    // frame_to_set(widget_m, frame, &dcdc::set_set_output_vol_max);
 }
 void frame2set_output_cur(Widget *widget_m, struct can_frame frame)
 {
@@ -155,7 +156,7 @@ void frame2set_output_cur(Widget *widget_m, struct can_frame frame)
 }
 void frame2set_output_pwr(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(widget_m, frame, &dcdc::set_set_output_pwr);
+    // frame_to_set(widget_m, frame, &dcdc::set_set_output_pwr);
 }
 void frame2set_switch_state(Widget *widget_m, struct can_frame frame)
 {
@@ -163,21 +164,21 @@ void frame2set_switch_state(Widget *widget_m, struct can_frame frame)
 }
 void frame2set_group_num(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(widget_m, frame, &dcdc::set_set_group_num, false);
+    // frame_to_set(widget_m, frame, &dcdc::set_set_group_num, false);
 }
 void frame2set_work_altitude(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(widget_m, frame, &dcdc::set_set_work_altitude, false);
+    // frame_to_set(widget_m, frame, &dcdc::set_set_work_altitude, false);
 }
 void frame2set_over_vol_reset(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(widget_m, frame, &dcdc::set_set_over_vol_reset, (over_vol_reset_e*)nullptr);
+    // frame_to_set(widget_m, frame, &dcdc::set_set_over_vol_reset, (over_vol_reset_e*)nullptr);
 }
 void frame2set_over_vol_protect(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(widget_m, frame, &dcdc::set_set_over_vol_protect, (over_vol_protect_e*)nullptr);
+    // frame_to_set(widget_m, frame, &dcdc::set_set_over_vol_protect, (over_vol_protect_e*)nullptr);
 }
 void frame2set_sc_reset(Widget *widget_m, struct can_frame frame)
 {
-    frame_to_set(widget_m, frame, &dcdc::set_set_sc_reset, (sc_reset_e*)nullptr);
+    // frame_to_set(widget_m, frame, &dcdc::set_set_sc_reset, (sc_reset_e*)nullptr);
 }

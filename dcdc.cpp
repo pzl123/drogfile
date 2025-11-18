@@ -114,8 +114,9 @@ void deal_with_frame(Widget *widget_m, struct can_frame frame)
 
     if (can_id_info.can_id_info.src_addr == 0xF0) /* 发送报文 */
     {
-        print_can_frame(frame);
+        // print_can_frame(frame);
         dcdc_func_no_type func_no = (dcdc_func_no_type)((frame.data[2] << 8) | frame.data[3]);
+        qDebug() << Qt::hex <<  Qt::showbase << func_no;
         switch (func_no)
         {
         case SET_MODE_WORK_ALTITUDE:

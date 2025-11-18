@@ -2,12 +2,45 @@
 #define DCDC_H
 
 #include <QObject>
+#include <QDebug>
 #include <iostream>
-
+#include <list>
+#include <memory>
 #include <unistd.h>
 #include <cstdint>
-
+#include <cstring>
+#include <linux/can.h>
 #include "dcdc_set.h"
+
+class Subject;
+
+class Observer
+{
+public:
+    Observer(const std::string &name = "unkown"):m_name(name){}
+    virtual ~Observer() = default;
+
+    virtual void update(Subject *sbj, struct can_frame frame) = 0;
+    virtual const std::string& name(){return m_name;}
+private:
+    std::string m_name;
+};
+
+
+class Subject
+{
+public:
+    Subject(){}
+    virtual ~Subject() = default;
+    virtual void attach(Observer* p_obs) = 0;
+    virtual void detach(Observer* p_obs) = 0;
+    virtual void notify(struct can_frame frame) = 0;
+
+protected:
+    std::list<Observer *> m_observer_list;
+};
+
+
 
 class Widget;
 
@@ -248,11 +281,33 @@ typedef struct dc_set_msg
     _(over_vol_protect_e, over_vol_protect, "设置的过压保护")\
     _(sc_reset_e, sc_reset, "设置的短路复位")
 
-class dcdc
+class dcdc : public Subject
 {
 public:
     dcdc();
     ~dcdc();
+
+    void attach(Observer* p_obs) override
+    {
+        m_observer_list.push_back(p_obs);
+    }
+
+    void detach(Observer* p_obs) override
+    {
+        m_observer_list.remove(p_obs);
+    }
+
+
+    void notify(struct can_frame frame) override
+    {
+        // qDebug() << "dcdc::notify() called, observer count:" << m_observer_list.size();
+        for (Observer* obs : m_observer_list)
+        {
+            obs->update(this, frame);
+        }
+    }
+
+
 
     template <typename T>
     void update_member(T &old_data, const T &new_data)
@@ -266,21 +321,56 @@ public:
     DCDC_MEMBER_LIST(MAKE_GETTER)
 #undef MAKE_GETTER
 
-#define MAKE_SETTER(type, name, doc) \
-    void set_##name(const type &v) { update_member(name, v); }
-    DCDC_MEMBER_LIST(MAKE_SETTER)
-#undef MAKE_SETTER
+// #define MAKE_SETTER(type, name, doc) \
+//     void set_##name(struct can_frame frame, const type &v) { update_member(name, v); notify(frame);}
+//     DCDC_MEMBER_LIST(MAKE_SETTER)
+// #undef MAKE_SETTER
+
+    void set_dcdc_id(struct can_frame frame, const uint32_t &v)
+    {
+        dcdc_id = v;
+    }
+
+    void set_output_vol(struct can_frame frame, const float32_t &v)
+    {
+        output_vol = v;
+    }
+
+    void set_output_cur(struct can_frame frame, const float32_t &v)
+    {
+        output_cur = v;
+    }
+    void set_output_switchstate(struct can_frame frame, const switch_state_e &v)
+    {
+        switch_state = v;
+    }
 
 // 为 dc_set_msg 成员生成 getter/setter
 #define MAKE_GETSETTER(type, name, doc) \
-    type get_set_##name() const { return dc_set_msg.name; }
+    type get_set_##name() const {  return dc_set_msg.name; }
     DC_SET_MEMBER_LIST(MAKE_GETSETTER)
 #undef MAKE_GETSETTER
 
-#define MAKE_SETSETTER(type, name, doc) \
-    void set_set_##name(const type &v) { update_member(dc_set_msg.name, v); }
-    DC_SET_MEMBER_LIST(MAKE_SETSETTER)
-#undef MAKE_SETSETTER
+// #define MAKE_SETSETTER(type, name, doc) \
+//     void set_set_##name(struct can_frame frame, const type &v) { update_member(dc_set_msg.name, v); std::cout << get_set_##name() << std::endl; notify(frame); }
+//     DC_SET_MEMBER_LIST(MAKE_SETSETTER)
+// #undef MAKE_SETSETTER
+    void set_set_output_vol(struct can_frame frame, const float32_t &v)
+    {
+        dc_set_msg.output_vol = v;
+    }
+
+    void set_set_output_cur(struct can_frame frame, const float32_t &v)
+    {
+        dc_set_msg.output_cur = v;
+    }
+
+    void set_set_switch_state(struct can_frame frame, const switch_state_e &v)
+    {
+        dc_set_msg.switch_state = v;
+    }
+
+
 
 private:
 #define DECLARE_MEMBER(type, name, doc) type name{};
@@ -291,17 +381,90 @@ private:
 };
 
 
-class dcdc_manager:public QObject
+class dcdc_manager : public QObject
 {
     Q_OBJECT
-signals:
-    void outputVoltageChanged(int index, float voltage);  // 发射这个信号
-    void outputPowerChanged(int index, float power);
+
 public:
-    dcdc_manager();
+    dcdc_manager(QObject *parent = nullptr)
+        : QObject(parent)
+    {}
+
+    Observer* get_observer() { return &m_observer; }
+
+signals:
+    void outputVolChanged(int index, double vol);
+    void setoutputVolChanged(int index, double vol);
+    void outputCurChanged(int index, double vol);
+    void setoutputCurChanged(int index, double vol);
+    void switchStateChanged(int index, double vol);
+    void setswitchStateChanged(int index, double vol);
+
+private:
+    struct ManagerObserver : public Observer
+    {
+        explicit ManagerObserver(dcdc_manager* mgr)
+            : Observer("dcdc_manager")
+            , manager(mgr)
+        {}
+
+        void update(Subject* sbj, struct can_frame frame) override
+        {
+            if (auto* dc = dynamic_cast<dcdc*>(sbj))
+            {
+                uint32_t id = dc->get_dcdc_id();
+                std::cout << name() << " received update from dcunit[" << id << "]" << std::endl;
+                dcdc_func_no_type func_no = (dcdc_func_no_type)((frame.data[2] << 8) | frame.data[3]);
+                qDebug() << Qt::hex << Qt::showbase << func_no;
+                switch (func_no)
+                {
+                case GET_MODE_OUTPUT_VOL:
+                {
+                    double value = dc->get_output_vol();
+                    qDebug() << "emit vol change" << value;
+                    emit manager->outputVolChanged(id, value);
+                    break;
+                }
+                case SET_MODE_OUTPUT_VOL:
+                {
+                    double value = dc->get_set_output_vol();
+                    qDebug() << "emit setvol change" << value;
+                    emit manager->setoutputVolChanged(id, value);
+                    break;
+                }
+                case GET_MODE_OUTPUT_CUR:
+                {
+                    double value = dc->get_output_cur();
+                    qDebug() << "emit cur change" << value;
+                    emit manager->outputCurChanged(id, value);
+                    break;
+                }
+                case SET_MODE_OUTPUT_CUR:
+                {
+                    double value = dc->get_set_output_cur();
+                    qDebug() << "emit setcur change" << value;
+                    emit manager->setoutputCurChanged(id, value);
+                    break;
+                }
+                case SET_MODE_SWITCH:
+                {
+                    int value = dc->get_set_switch_state();
+                    qDebug() << "emit set_switchstate change" << value;
+                    emit manager->setswitchStateChanged(id, value);
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
+        }
+
+        dcdc_manager* manager;
+    };
+
+    ManagerObserver m_observer{this};
 };
 
-dcdc *get_g_dcdc_info(void);
 // dcdc_manager *get_g_dcdc_manager();
 void deal_with_frame(Widget *widget_m, struct can_frame frame);
 

@@ -89,11 +89,27 @@ void recv_float_data_pre(struct can_frame frame, recv_data_t *recv_data)
 
 int32_t recv_get_mode_out_vol(Widget *widget_m, can_frame frame)
 {
+    dcdc* dc = widget_m->getdcdcArray();
+    recv_data_t recv_data;
+    recv_float_data_pre(frame, &recv_data);
+    dcdc_can_id_u can_id_info = {0};
+    can_id_info.id = frame.can_id;
+    int index = can_id_info.can_id_info.src_addr - 1;
+    dc[index].set_output_vol(frame, recv_data.float_data);
+    dc[index].notify(frame);
     return 0;
 }
 
 int32_t recv_get_mode_out_cur(Widget *widget_m, can_frame frame)
 {
+    dcdc_can_id_u can_id_info = {0};
+    can_id_info.id = frame.can_id;
+    recv_data_t recv_data;
+    recv_float_data_pre(frame, &recv_data);
+    int index = can_id_info.can_id_info.src_addr - 1;
+    dcdc* dc = widget_m->getdcdcArray();
+    dc[index].set_output_cur(frame, recv_data.float_data);
+    dc[index].notify(frame);
     return 0;
 }
 

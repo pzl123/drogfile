@@ -24,49 +24,11 @@
 #include <linux/can.h>
 #include "dcdc.h"
 
-
-
-static void processLine(Widget *widget_m, const QString &line)
+typedef enum
 {
-    // qDebug() << line;
-    QRegularExpression re(R"zzz(\((\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2}\.\d+)\)\s+(\w+)\s+([0-9a-fA-F]+)\s+\[\d\]\s+(([0-9a-fA-F]{2}(?:\s+[0-9a-fA-F]{2})*)?))zzz");
-    QRegularExpressionMatch match = re.match(line);
-    if (match.hasMatch())
-    {
-
-        QString ymd       = match.captured(1);
-        QString timestr   = match.captured(2);
-        QString canIdStr  = match.captured(4);
-        QString dataStr   = match.captured(5);
-        // qDebug() << "年份:" << ymd;
-        QDate date = QDate::fromString(ymd, "yyyy-MM-dd");
-        QTime time = QTime::fromString(timestr);
-
-        struct can_frame frame = {0};
-        frame.can_id = canIdStr.toUInt(nullptr, 16);
-        QStringList dataList = dataStr.split(' ', Qt::SkipEmptyParts);
-        for (int i = 0; i < dataList.size() && i < 8; ++i)
-        {
-            frame.data[i] = static_cast<quint8>(dataList[i].toInt(nullptr, 16));
-            frame.can_dlc = i + 1;
-        }
-        print_can_frame(frame);
-        // qDebug() << date.toString("yyyy-MM-dd");
-        // qDebug() << time.toString("hh:mm:ss.zzzz");
-        // qDebug() << QString("CAN ID: %1").arg(frame.can_id, 8, 16, QChar('0'));
-        // for (int i = 0; i < 8; i++)
-        // {
-        //     qDebug() <<QString("DATA%1: %2").arg(i).arg(frame.data[i], 2, 16, QChar('0'));
-        // }
-        deal_with_frame(widget_m, frame);
-    }
-    else
-    {
-        qDebug() << "no match";
-    }
-
-}
-
+    FORWARD = 0,
+    BACK_OFF = 1
+} E_DIRECTION;
 
 static void model_init(QSqlDatabase &db, QString& table_name, QSqlTableModel *model)
 {
@@ -97,18 +59,75 @@ static void model_init(QSqlDatabase &db, QString& table_name, QSqlTableModel *mo
     // model->setHeaderData(gradesCol, Qt::Horizontal, "grades");
 }
 
-void Widget::timerstart()
+int Widget::get_total_row(const QString& table_name)
 {
-    QSqlQuery query(getdatabase());
-    QString table_name = "student";
+    QSqlQuery query(m_db);
     query.prepare(QString("SELECT COUNT(*) FROM %1").arg(table_name));
-    int all_row_num = 0;
     if (query.exec() && query.next())
     {
-        all_row_num = query.value(0).toInt();
+        return query.value(0).toInt();
     }
-    int *currecno = getcurRecNo();
-    if (*currecno >= all_row_num)
+    else
+    {
+        qWarning() << "Failed to get total row count!";
+        return 0;
+    }
+
+}
+
+void read_a_row_by_id(Widget *widget_a, int& last_id, E_DIRECTION direction)
+{
+    QString direction_str = (direction == FORWARD) ? ">" : "<";
+    QSqlQuery query(widget_a->getdatabase());
+    QString table_name = "dcdc_frame";
+    QString prepare_str = QString("SELECT * FROM dcdc_frame WHERE id %1 %2 ORDER BY id LIMIT 1").arg(direction_str).arg(last_id);
+    // qDebug() << prepare_str;
+    query.prepare(prepare_str);
+
+    QVariantMap tmp_map;
+    if (query.exec() && query.next())
+    {
+        QSqlRecord r = query.record();
+        for (int i = 0; i < r.count(); ++i)
+        {
+            tmp_map[r.fieldName(i)] = r.value(i);
+        }
+
+        last_id = tmp_map["id"].toInt();
+        // qDebug() << tmp_map;
+
+        struct can_frame frame{};
+        frame.can_id = tmp_map["can_id"].toUInt();
+        frame.can_dlc = tmp_map["can_len"].toUInt();
+        for (int i = 0; i < frame.can_dlc; i++)
+        {
+            frame.data[i] = tmp_map[QString("can_data%1").arg(i)].toUInt();
+        }
+
+        // frame.can_id = 0x06083780;
+        // frame.data[0] = 0x03;
+        // frame.data[1] = 0x00;
+        // frame.data[2] = 0x00;
+        // frame.data[3] = 0x21;
+        // frame.data[4] = 0x44;
+        // frame.data[5] = 0x48;
+        // frame.data[6] = 0x00;
+        // frame.data[7] = 0x00;
+        // print_can_frame(frame);
+        deal_with_frame(widget_a, frame);
+    }
+    else
+    {
+        qDebug() << "error read_a_row";
+    }
+
+}
+
+void Widget::timerstart()
+{
+    QString table_name = "dcdc_frame";
+    int all_row_num = get_total_row(table_name);
+    if (m_curRecNo >= all_row_num)
     {
         qDebug() << "read end";
         QMessageBox::information(this, "data end", "data read end");
@@ -117,21 +136,34 @@ void Widget::timerstart()
         return;
     }
 
-    QSqlRecord  curRec = getmodel()->record(*currecno);
-    QString valuestr = curRec.value("logstr").toString();
-    qDebug() << *currecno << "m_model->rowCount is :" << getmodel()->rowCount();
-    processLine(this, valuestr);
-    (*currecno) += 1;
+    read_a_row_by_id(this, m_curRecNo, FORWARD);
+
 }
 
 
 Widget::Widget(QWidget *parent)
     : QWidget(parent)
     , ui(new Ui::Widget)
+    , m_manager()
+    , m_dcdc{}
 {
     ui->setupUi(this);
     m_curRecNo = 0;
     ui->timelineEdit->setText("1000");
+
+    connect(&m_manager, &dcdc_manager::outputVolChanged, this, &Widget::onOutputVoltageChanged);
+    connect(&m_manager, &dcdc_manager::setoutputVolChanged, this, &Widget::onsetOutputVoltageChanged);
+    connect(&m_manager, &dcdc_manager::outputCurChanged, this, &Widget::onOutputCurrentChanged);
+    connect(&m_manager, &dcdc_manager::setoutputCurChanged, this, &Widget::onsetOutputCurrentChanged);
+    connect(&m_manager, &dcdc_manager::switchStateChanged, this, &Widget::onswitchStateChanged);
+    connect(&m_manager, &dcdc_manager::setswitchStateChanged, this, &Widget::onsetswitchStateChanged);
+
+    for (int i = 0; i < DCDC_NUM; i++)
+    {
+        struct can_frame frame{};
+        m_dcdc[i].set_dcdc_id(frame, i + 1);
+        m_dcdc[i].attach(m_manager.get_observer());
+    }
 
     QString data_path = "/home/zlgmcu/Desktop/qt_project/drogfile/drogfile.db";
     QString table_name = "dcdc_frame";
@@ -149,8 +181,8 @@ Widget::Widget(QWidget *parent)
             can_data5 INTEGER, \
             can_data6 INTEGER, \
             can_data7 INTEGER)";
-        drop_table_in_db(table_name);
-        create_table_in_db(create_str ,table_name);
+        // drop_table_in_db(table_name);
+        // create_table_in_db(create_str ,table_name);
         m_model = new QSqlTableModel(this, m_db);
         model_init(m_db, table_name,  m_model);
 /*
@@ -170,7 +202,7 @@ Widget::Widget(QWidget *parent)
         }
     }
 
-    QStandardItemModel *m_dcdc_model = new QStandardItemModel(12, 7, this);
+    m_dcdc_model = new QStandardItemModel(12, 7, this);
     m_dcdc_model->setHorizontalHeaderItem(0, new QStandardItem("ID"));
     m_dcdc_model->setHorizontalHeaderItem(1, new QStandardItem("vol"));
     m_dcdc_model->setHorizontalHeaderItem(2, new QStandardItem("set_vol"));
@@ -186,10 +218,12 @@ Widget::Widget(QWidget *parent)
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &Widget::timerstart);
 
+    // connect(this, &Widget::setoutputVolChanged, this, &Widget::onOutputVoltageChanged);
+
+
     this->setAcceptDrops(true);
     ui->showplainTextEdit->setAcceptDrops(false);
     ui->showplainTextEdit->setReadOnly(true);
-    ui->dcdc_id_lineEdit->setText("7");
 }
 
 Widget::~Widget()
@@ -326,12 +360,12 @@ static void string_info_2_dcdc_insert_msg(QString& line_str_, linestr_2_dbinfo_t
     std::smatch match;
     if (std::regex_search(line_str, match, re))
     {
-        std::cout << "data:" << match[1] << std::endl;
-        std::cout << "time:" << match[2] << std::endl;
-        std::cout << "can_itf:" << match[3] << std::endl;
-        std::cout << "can_id:" << match[4] << std::endl;
-        std::cout << "can_len:" << match[5] << std::endl;
-        std::cout << "can_data:" << match[6] << std::endl;
+        // std::cout << "data:" << match[1] << std::endl;
+        // std::cout << "time:" << match[2] << std::endl;
+        // std::cout << "can_itf:" << match[3] << std::endl;
+        // std::cout << "can_id:" << match[4] << std::endl;
+        // std::cout << "can_len:" << match[5] << std::endl;
+        // std::cout << "can_data:" << match[6] << std::endl;
     }
     else
     {
@@ -464,10 +498,49 @@ void Widget::on_startpushButton_clicked()
     }
 }
 
-void Widget::onOutputVoltageChanged(int index, float voltage)
+
+
+
+void Widget::onOutputVoltageChanged(int index, double voltage)
 {
+    int column = 1;
+    qDebug() << "slot voltage change";
+    show_msg_2_model(index, column, voltage);
+}
 
-    this->m_dcdc[index].set_output_vol(voltage);
-    ui->set_output_vol_lineEdit->setText(QString::number(this->m_dcdc[index].get_output_vol()));
+void Widget::onsetOutputVoltageChanged(int index, double voltage)
+{
+    qDebug() << "slot setvoltage change";
+    int column = 2;
+    show_msg_2_model(index, column, voltage);
+}
 
+void Widget::onOutputCurrentChanged(int index, double current)
+{
+    int column = 3;
+    qDebug() << "slot current change";
+    show_msg_2_model(index, column, current);
+}
+
+void Widget::onsetOutputCurrentChanged(int index, double current)
+{
+    int column = 4;
+    qDebug() << "slot setcurrent change";
+    show_msg_2_model(index, column, current);
+}
+
+void Widget::onswitchStateChanged(int index, int switstate)
+{
+    qDebug() << "slot switchstate change";
+    int column = 5;
+    QString switch_state = (DCDC_TURN_ON == switstate) ? "ON" : "OFF";
+    show_msg_2_model(index, column, switch_state);
+}
+
+void Widget::onsetswitchStateChanged(int index, int switchstate)
+{
+    qDebug() << "slot setswitchstate change";
+    int column = 6;
+    QString switch_state = (DCDC_TURN_ON == switchstate) ? "ON" : "OFF";
+    show_msg_2_model(index, column, switch_state);
 }

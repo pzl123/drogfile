@@ -34,6 +34,7 @@ public:
     void create_table_in_db(QString create_str, const QString &table_name);
     void insert_msg_to_db(linestr_2_dbinfo_t& msg, const QString& table_name);
     void display_all_db_class();
+    int get_total_row(const QString& table_name);
     void set_output_voL(float32_t value);
     Ui::Widget* getui() { return ui; }
     QTimer* gettimer() { return m_timer; }
@@ -46,6 +47,11 @@ public:
         return m_dcdc[index];
     }
 
+    template <typename T>
+    void show_msg_2_model(int row, int column, T value)
+    {
+        m_dcdc_model->setData(m_dcdc_model->index(row, column), value);
+    }
 
 private:
     Ui::Widget *ui;
@@ -54,16 +60,23 @@ private:
     QStandardItemModel *m_dcdc_model;
     QSqlDatabase m_db;
     int m_curRecNo;
+    dcdc_manager m_manager;
     dcdc m_dcdc[DCDC_NUM];
 
 signals:
-    void outputVoltageChanged(int index, float voltage);  // 发射这个信号
-    void outputPowerChanged(int index, float power);
+    void setoutputVolChanged(int index, double vol);
 
 private slots:
     void on_startpushButton_clicked();
-    void onOutputVoltageChanged(int index, float voltage);
+    void onOutputVoltageChanged(int index, double voltage);
+    void onsetOutputVoltageChanged(int index, double voltage);
+    void onOutputCurrentChanged(int index, double current);
+    void onsetOutputCurrentChanged(int index, double current);
+    void onswitchStateChanged(int index, int switstate);
+    void onsetswitchStateChanged(int index, int switchstate);
     void timerstart();
+
+
 
 protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
